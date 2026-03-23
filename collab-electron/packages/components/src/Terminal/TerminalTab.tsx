@@ -13,6 +13,9 @@ import "./TerminalTab.css";
 // processing many small sequential writes.
 const DATA_BUFFER_FLUSH_MS = 5;
 
+const DEFAULT_FONT_FAMILY = 'Menlo, Monaco, "Courier New", monospace';
+const DEFAULT_FONT_SIZE = 12;
+
 interface TerminalTabProps {
 	sessionId: string;
 	visible: boolean;
@@ -27,10 +30,29 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData }: TerminalT
 	useEffect(() => {
 		if (!containerRef.current) return;
 
+		let cleanup: (() => void) | null = null;
+		let cancelled = false;
+		const container = containerRef.current;
+
+		Promise.all([
+			window.api.getPref("terminalFontFamily").catch(() => null),
+			window.api.getPref("terminalFontSize").catch(() => null),
+		]).then(([rawFamily, rawSize]) => {
+			if (cancelled) return;
+
+			const fontFamily =
+				typeof rawFamily === "string" && rawFamily.trim() !== ""
+					? `${rawFamily.trim()}, ${DEFAULT_FONT_FAMILY}`
+					: DEFAULT_FONT_FAMILY;
+			const fontSize =
+				typeof rawSize === "number" && rawSize >= 6 && rawSize <= 32
+					? rawSize
+					: DEFAULT_FONT_SIZE;
+
 		const term = new Terminal({
 			theme: getTheme(),
-			fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-			fontSize: 12,
+			fontFamily,
+			fontSize,
 			fontWeight: "300",
 			fontWeightBold: "500",
 			cursorBlink: true,
@@ -40,7 +62,7 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData }: TerminalT
 
 		const fit = new FitAddon();
 		term.loadAddon(fit);
-		term.open(containerRef.current);
+		term.open(container);
 		fitRef.current = fit;
 
 		const unicode11 = new Unicode11Addon();
@@ -158,7 +180,7 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData }: TerminalT
 				rafId = requestAnimationFrame(() => fit.fit());
 			}
 		});
-		resizeObserver.observe(containerRef.current);
+		resizeObserver.observe(container);
 
 		const mediaQuery = window.matchMedia(
 			"(prefers-color-scheme: dark)",
@@ -168,7 +190,7 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData }: TerminalT
 		};
 		mediaQuery.addEventListener("change", onThemeChange);
 
-		return () => {
+		cleanup = () => {
 			if (flushTimer !== undefined) {
 				clearTimeout(flushTimer);
 				flushData();
@@ -180,6 +202,12 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData }: TerminalT
 			offShellBlur();
 			term.dispose();
 			fitRef.current = null;
+		};
+		});
+
+		return () => {
+			cancelled = true;
+			cleanup?.();
 		};
 	}, [sessionId]);
 
