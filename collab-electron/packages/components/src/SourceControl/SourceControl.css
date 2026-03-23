@@ -1,0 +1,359 @@
+/* Source Control panel */
+.scm-container {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+}
+
+/* Header with branch info */
+.scm-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 12px;
+	font-size: 12px;
+	color: var(--muted-foreground);
+	border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+	flex-shrink: 0;
+}
+
+.scm-branch-name {
+	font-family: 'IBM Plex Mono', monospace;
+	font-weight: 600;
+	color: var(--foreground);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.scm-sync-info {
+	font-size: 11px;
+	color: var(--muted-foreground);
+	margin-left: auto;
+	white-space: nowrap;
+}
+
+.scm-refresh-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: none;
+	border: none;
+	padding: 2px;
+	cursor: pointer;
+	color: var(--muted-foreground);
+	border-radius: 4px;
+	margin-left: auto;
+}
+
+.scm-refresh-button:hover {
+	color: var(--foreground);
+	background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+/* Commit box */
+.scm-commit-box {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px 12px;
+	border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+	flex-shrink: 0;
+}
+
+.scm-commit-textarea {
+	width: 100%;
+	min-height: 60px;
+	max-height: 120px;
+	resize: vertical;
+	padding: 8px;
+	font-size: 12px;
+	font-family: inherit;
+	background: color-mix(in srgb, var(--foreground) 5%, transparent);
+	color: var(--foreground);
+	border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+	border-radius: 6px;
+	outline: none;
+}
+
+.scm-commit-textarea:focus {
+	border-color: color-mix(in srgb, var(--foreground) 30%, transparent);
+}
+
+.scm-commit-textarea::placeholder {
+	color: var(--muted-foreground);
+	opacity: 0.6;
+}
+
+.scm-commit-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.scm-commit-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	flex: 1;
+	padding: 5px 10px;
+	font-size: 12px;
+	font-weight: 500;
+	cursor: pointer;
+	border: none;
+	border-radius: 6px;
+	background: var(--foreground);
+	color: var(--background);
+}
+
+.scm-commit-button:hover:not(:disabled) {
+	opacity: 0.85;
+}
+
+.scm-commit-button:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+.scm-ai-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 5px 8px;
+	cursor: pointer;
+	border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+	border-radius: 6px;
+	background: none;
+	color: var(--muted-foreground);
+}
+
+.scm-ai-button:hover:not(:disabled) {
+	color: var(--foreground);
+	background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.scm-ai-button:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+.scm-ai-button.generating {
+	color: var(--foreground);
+}
+
+/* Error message */
+.scm-error {
+	font-size: 11px;
+	color: var(--destructive);
+	padding: 0 12px 4px;
+}
+
+.scm-success {
+	font-size: 11px;
+	color: #4ade80;
+	padding: 0 12px 4px;
+}
+
+/* File change list */
+.scm-file-list {
+	flex: 1;
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+
+/* Section header */
+.scm-section-header {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 12px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: var(--muted-foreground);
+	cursor: pointer;
+	user-select: none;
+}
+
+.scm-section-header:hover {
+	color: var(--foreground);
+}
+
+.scm-section-chevron {
+	display: flex;
+	align-items: center;
+	transition: transform 0.15s ease;
+}
+
+.scm-section-chevron.collapsed {
+	transform: rotate(-90deg);
+}
+
+.scm-section-count {
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 10px;
+	font-weight: 500;
+	color: var(--muted-foreground);
+	opacity: 0.8;
+}
+
+.scm-section-action {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: auto;
+	padding: 2px;
+	border: none;
+	background: none;
+	cursor: pointer;
+	color: var(--muted-foreground);
+	border-radius: 4px;
+	opacity: 0;
+}
+
+.scm-section-header:hover .scm-section-action {
+	opacity: 1;
+}
+
+.scm-section-action:hover {
+	color: var(--foreground);
+	background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+/* File change row */
+.scm-file-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 12px 3px 24px;
+	font-size: 12px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.scm-file-row:hover {
+	background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.scm-file-icon {
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+.scm-file-info {
+	display: flex;
+	align-items: baseline;
+	gap: 4px;
+	min-width: 0;
+	flex: 1;
+}
+
+.scm-file-name {
+	color: var(--foreground);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.scm-file-dir {
+	font-size: 11px;
+	color: var(--muted-foreground);
+	opacity: 0.7;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	direction: rtl;
+	text-align: left;
+}
+
+.scm-file-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 10px;
+	font-weight: 700;
+	border-radius: 3px;
+	flex-shrink: 0;
+}
+
+.scm-file-badge.badge-M { color: #5c9bcf; }
+.scm-file-badge.badge-A { color: #4ade80; }
+.scm-file-badge.badge-D { color: var(--destructive); }
+.scm-file-badge.badge-R { color: #a78bfa; }
+.scm-file-badge.badge-U { color: #f59e0b; }
+.scm-file-badge.badge-\\? { color: var(--muted-foreground); }
+
+.scm-file-actions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex-shrink: 0;
+	opacity: 0;
+}
+
+.scm-file-row:hover .scm-file-actions {
+	opacity: 1;
+}
+
+.scm-file-action-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 2px;
+	border: none;
+	background: none;
+	cursor: pointer;
+	color: var(--muted-foreground);
+	border-radius: 4px;
+}
+
+.scm-file-action-btn:hover {
+	color: var(--foreground);
+	background: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.scm-file-action-btn.discard:hover {
+	color: var(--destructive);
+}
+
+.scm-confirm-label {
+	font-size: 10px;
+	color: var(--destructive);
+	font-weight: 600;
+}
+
+/* Empty state */
+.scm-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 32px 16px;
+	text-align: center;
+	color: var(--muted-foreground);
+	font-size: 12px;
+	gap: 4px;
+}
+
+.scm-empty-icon {
+	opacity: 0.4;
+	margin-bottom: 8px;
+}
+
+/* Spinner for AI loading */
+@keyframes scm-spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+
+.scm-spinner {
+	animation: scm-spin 1s linear infinite;
+	display: inline-flex;
+}

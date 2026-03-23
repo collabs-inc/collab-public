@@ -17,6 +17,7 @@ import {
 import { registerKnowledgeHandlers } from "./ipc-knowledge";
 import { registerCanvasHandlers } from "./ipc-canvas";
 import { registerMiscHandlers } from "./ipc-misc";
+import { registerGitHandlers } from "./ipc-git";
 
 const FS_CHANGE_DELETED = 3;
 
@@ -132,4 +133,5 @@ export function registerIpcHandlers(config: AppConfig): void {
   registerKnowledgeHandlers(knowledgeCtx);
   registerCanvasHandlers(canvasCtx);
   registerMiscHandlers(miscCtx);
+  registerGitHandlers({ config: () => appConfig });
 }

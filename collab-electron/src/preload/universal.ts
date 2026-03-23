@@ -690,6 +690,32 @@ contextBridge.exposeInMainWorld("api", {
         "agent:session-failed", handler,
       );
   },
+
+  // Git source control
+  gitStatus: () =>
+    ipcRenderer.invoke("git:status"),
+  gitStage: (paths: string[]) =>
+    ipcRenderer.invoke("git:stage", paths),
+  gitUnstage: (paths: string[]) =>
+    ipcRenderer.invoke("git:unstage", paths),
+  gitStageAll: () =>
+    ipcRenderer.invoke("git:stage-all"),
+  gitUnstageAll: () =>
+    ipcRenderer.invoke("git:unstage-all"),
+  gitDiscard: (paths: string[]) =>
+    ipcRenderer.invoke("git:discard", paths),
+  gitDiscardAll: () =>
+    ipcRenderer.invoke("git:discard-all"),
+  gitCommit: (message: string) =>
+    ipcRenderer.invoke("git:commit", message),
+  gitDiff: (filePath: string, cached: boolean) =>
+    ipcRenderer.invoke("git:diff", filePath, cached),
+  gitGenerateCommitMessage: () =>
+    ipcRenderer.invoke("git:generate-commit-message"),
+  aiValidateKey: (key: string) =>
+    ipcRenderer.invoke("ai:validate-key", key),
+  aiHasKey: () =>
+    ipcRenderer.invoke("ai:has-key"),
 });
 
 // Forward ctrl+wheel (trackpad pinch) from tile webviews to the canvas

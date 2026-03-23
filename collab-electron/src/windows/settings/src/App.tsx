@@ -8,6 +8,10 @@ import {
   Moon,
   Monitor,
   Terminal,
+  Sparkle,
+  CheckCircle,
+  XCircle,
+  CircleNotch,
 } from "@phosphor-icons/react";
 
 type ThemeMode = "light" | "dark" | "system";
@@ -595,7 +599,12 @@ function IntegrationsPane() {
   );
 }
 
-type Pane = "appearance" | "terminal" | "integrations" | "controls";
+type Pane =
+  | "appearance"
+  | "terminal"
+  | "integrations"
+  | "controls"
+  | "ai";
 
 const NAV_ITEMS: {
   id: Pane;
@@ -606,7 +615,167 @@ const NAV_ITEMS: {
     { id: "terminal", label: "Terminal", icon: Terminal },
     { id: "integrations", label: "Integrations", icon: PuzzlePiece },
     { id: "controls", label: "Controls", icon: Keyboard },
+    { id: "ai", label: "AI", icon: Sparkle },
   ];
+
+function AiPane() {
+  const [apiKey, setApiKey] = useState("");
+  const [hasExistingKey, setHasExistingKey] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<
+    "valid" | "invalid" | null
+  >(null);
+
+  useEffect(() => {
+    api.getPref("ai.hasKey").then(() => {
+      // We can't read the key (guarded), so check via aiHasKey
+      (window as unknown as { api: { aiHasKey: () => Promise<boolean> } }).api
+        .aiHasKey()
+        .then((has: boolean) => {
+          setHasExistingKey(has);
+        })
+        .catch(() => {});
+    }).catch(() => {});
+  }, []);
+
+  async function handleSave() {
+    if (!apiKey.trim() || apiKey.startsWith("sk-ant-\u2022")) return;
+    setValidating(true);
+    setValidationResult(null);
+    try {
+      const { valid } = await (
+        window as unknown as {
+          api: { aiValidateKey: (k: string) => Promise<{ valid: boolean }> };
+        }
+      ).api.aiValidateKey(apiKey.trim());
+      if (valid) {
+        await api.setPref("ai.apiKey", apiKey.trim());
+        setHasExistingKey(true);
+        setValidationResult("valid");
+        setApiKey("");
+      } else {
+        setValidationResult("invalid");
+      }
+    } catch {
+      setValidationResult("invalid");
+    } finally {
+      setValidating(false);
+    }
+  }
+
+  async function handleRemove() {
+    await api.setPref("ai.apiKey", "");
+    setHasExistingKey(false);
+    setApiKey("");
+    setValidationResult(null);
+  }
+
+  return (
+    <div className="space-y-6 p-6">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold">AI</h2>
+        <p className="text-sm text-muted-foreground">
+          Configure AI-powered features like commit message generation.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Anthropic API Key</p>
+          <p className="text-xs text-muted-foreground">
+            Used for AI-generated commit messages in Source Control.
+          </p>
+        </div>
+
+        {hasExistingKey && !apiKey && (
+          <div className="flex items-center gap-2">
+            <div
+              className="flex-1 rounded-md px-3 py-2 text-sm"
+              style={{
+                backgroundColor:
+                  "color-mix(in srgb, var(--foreground) 5%, transparent)",
+                border:
+                  "1px solid color-mix(in srgb, var(--border) 60%, transparent)",
+                color: "var(--muted-foreground)",
+              }}
+            >
+              sk-ant-\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022
+            </div>
+            <button
+              type="button"
+              onClick={handleRemove}
+              className="rounded-md px-3 py-2 text-sm font-medium cursor-pointer"
+              style={{
+                border:
+                  "1px solid color-mix(in srgb, var(--border) 60%, transparent)",
+                background: "none",
+                color: "var(--destructive)",
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        )}
+
+        {(!hasExistingKey || apiKey) && (
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              placeholder="sk-ant-api03-..."
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                setValidationResult(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleSave();
+              }}
+              className="flex-1 rounded-md px-3 py-2 text-sm outline-none"
+              style={{
+                backgroundColor:
+                  "color-mix(in srgb, var(--foreground) 5%, transparent)",
+                border:
+                  "1px solid color-mix(in srgb, var(--border) 60%, transparent)",
+                color: "var(--foreground)",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={!apiKey.trim() || validating}
+              className="rounded-md px-3 py-2 text-sm font-medium cursor-pointer"
+              style={{
+                background: "var(--foreground)",
+                color: "var(--background)",
+                border: "none",
+                opacity: !apiKey.trim() || validating ? 0.4 : 1,
+              }}
+            >
+              {validating ? (
+                <CircleNotch size={14} className="animate-spin" />
+              ) : (
+                "Save"
+              )}
+            </button>
+          </div>
+        )}
+
+        {validationResult === "valid" && (
+          <div className="flex items-center gap-1.5 text-xs" style={{ color: "#4ade80" }}>
+            <CheckCircle size={14} weight="fill" />
+            <span>API key validated and saved.</span>
+          </div>
+        )}
+        {validationResult === "invalid" && (
+          <div className="flex items-center gap-1.5 text-xs" style={{ color: "var(--destructive)" }}>
+            <XCircle size={14} weight="fill" />
+            <span>Invalid API key. Please check and try again.</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function CloseButton({ onClick }: { onClick: () => void }) {
   return (
@@ -730,6 +899,7 @@ export default function App() {
         {activePane === "terminal" && <TerminalPane />}
         {activePane === "integrations" && <IntegrationsPane />}
         {activePane === "controls" && <ControlsPane />}
+        {activePane === "ai" && <AiPane />}
       </div>
     </div>
   );

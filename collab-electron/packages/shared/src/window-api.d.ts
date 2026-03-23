@@ -4,6 +4,7 @@ import type {
   TreeNode,
 } from "./types";
 import type { ReplayMessage } from "./replay-types";
+import type { GitStatusResult } from "./git-types";
 
 type Unsubscribe = () => void;
 
@@ -366,6 +367,28 @@ export interface CollabApi {
 
   // Canvas pinch forwarding
   forwardPinch: (deltaY: number) => void;
+
+  // Git source control
+  gitStatus: () => Promise<GitStatusResult>;
+  gitStage: (paths: string[]) => Promise<void>;
+  gitUnstage: (paths: string[]) => Promise<void>;
+  gitStageAll: () => Promise<void>;
+  gitUnstageAll: () => Promise<void>;
+  gitDiscard: (paths: string[]) => Promise<void>;
+  gitDiscardAll: () => Promise<void>;
+  gitCommit: (message: string) => Promise<{ hash: string }>;
+  gitDiff: (
+    filePath: string,
+    cached: boolean,
+  ) => Promise<string>;
+  gitGenerateCommitMessage: () => Promise<{
+    message: string;
+    model: string;
+  }>;
+  aiValidateKey: (
+    key: string,
+  ) => Promise<{ valid: boolean }>;
+  aiHasKey: () => Promise<boolean>;
 }
 
 declare global {

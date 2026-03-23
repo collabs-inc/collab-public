@@ -29,6 +29,15 @@ import {
 	isSubpath,
 	parentPath,
 } from '@collab/shared/path-utils';
+import {
+	TreeView as TreeViewIcon,
+	GitBranch,
+} from '@phosphor-icons/react';
+import { SourceControlView } from '@collab/components/SourceControl';
+import '@collab/components/SourceControl/SourceControl.css';
+
+type NavViewMode = 'tree' | 'scm';
+const VIEW_MODE_KEY = 'collab:nav-view-mode';
 
 const PLATFORM = window.api.getPlatform();
 
@@ -195,6 +204,32 @@ export default function App() {
 		});
 	}, []);
 
+	const [viewMode, setViewMode] =
+		useState<NavViewMode>('tree');
+
+	useEffect(() => {
+		window.api.getPref(VIEW_MODE_KEY).then((v) => {
+			if (v === 'scm') setViewMode('scm');
+		});
+	}, []);
+
+	const scmWorkspacePath = useMemo(() => {
+		if (selectedPath) {
+			const ws = workspacePaths.find(
+				(p) =>
+					selectedPath === p ||
+					selectedPath.startsWith(`${p}/`),
+			);
+			if (ws) return ws;
+		}
+		return workspacePaths[0] ?? '';
+	}, [selectedPath, workspacePaths]);
+
+	const switchViewMode = useCallback((mode: NavViewMode) => {
+		setViewMode(mode);
+		void window.api.setPref(VIEW_MODE_KEY, mode);
+	}, []);
+
 	const workspaces = useMemo(
 		() =>
 			workspacePaths.map((p) => ({
@@ -269,8 +304,9 @@ export default function App() {
 
 	const focusActiveSearch = useCallback(() => {
 		window.focus();
+		if (viewMode === 'scm') return;
 		treeSearchRef.current?.focusSearch();
-	}, []);
+	}, [viewMode]);
 
 	// Tooltip system — same data-tooltip pattern as shell window
 	useEffect(() => {
@@ -1315,6 +1351,41 @@ export default function App() {
 			);
 	}, [focusActiveSearch, selectFile, getAllFlatItems]);
 
+	const renderViewModeToggle = () => (
+		<div className="nav-view-toggle">
+			<button
+				type="button"
+				className={`nav-view-toggle-button${viewMode === 'tree' ? ' active' : ''}`}
+				onClick={() => switchViewMode('tree')}
+				title="Tree view"
+			>
+				<TreeViewIcon
+					size={14}
+					weight={
+						viewMode === 'tree'
+							? 'fill'
+							: 'regular'
+					}
+				/>
+			</button>
+			<button
+				type="button"
+				className={`nav-view-toggle-button${viewMode === 'scm' ? ' active' : ''}`}
+				onClick={() => switchViewMode('scm')}
+				title="Source Control"
+			>
+				<GitBranch
+					size={14}
+					weight={
+						viewMode === 'scm'
+							? 'fill'
+							: 'regular'
+					}
+				/>
+			</button>
+		</div>
+	);
+
 	return (
 		<div className="app">
 			<div className="workspace-content">
@@ -1329,8 +1400,11 @@ export default function App() {
 					</div>
 				)}
 
-				{!loading && !error && (
+				{!loading && !error && workspacePaths.length > 0 && (
+					<>
+						{viewMode === 'tree' && (
 						<div className="table-container items-table">
+							{renderViewModeToggle()}
 							<SearchSortControls
 								ref={
 									treeSearchRef
@@ -1502,7 +1576,24 @@ export default function App() {
 								</div>
 							</div>
 						</div>
-					)}
+						)}
+						{viewMode === 'scm' && scmWorkspacePath && (
+							<SourceControlView
+								workspacePath={scmWorkspacePath}
+								isActive={viewMode === 'scm'}
+								onSelectFile={selectFile}
+								leadingContent={renderViewModeToggle()}
+							/>
+						)}
+					</>
+				)}
+				{!loading && !error && workspacePaths.length === 0 && (
+					<div className="empty-state">
+						<p>
+							No workspace selected. Open a folder in Settings.
+						</p>
+					</div>
+				)}
 			</div>
 			{importModal && (
 				<ImportWebArticleModal
