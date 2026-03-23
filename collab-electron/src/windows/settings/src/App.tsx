@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  CaretDown,
   GearSix,
   Palette,
   Sun,
@@ -17,6 +18,7 @@ interface SettingsApi {
   getAgents: () => Promise<AgentStatus[]>;
   installSkill: (agentId: string) => Promise<{ ok: boolean }>;
   uninstallSkill: (agentId: string) => Promise<{ ok: boolean }>;
+  listMonoFonts: () => Promise<string[]>;
   close: () => void;
 }
 
@@ -170,6 +172,9 @@ function ThemeToggle({
 function AppearancePane() {
   const [theme, setTheme] = useState<ThemeMode>("system");
   const [canvasOpacity, setCanvasOpacity] = useState(0);
+  const [terminalFontFamily, setTerminalFontFamily] = useState("");
+  const [terminalFontSize, setTerminalFontSize] = useState(12);
+  const [monoFonts, setMonoFonts] = useState<string[]>([]);
 
   useEffect(() => {
     api.getPref("theme")
@@ -183,6 +188,21 @@ function AppearancePane() {
         if (typeof v === "number") setCanvasOpacity(v);
       })
       .catch(() => { });
+    api.getPref("terminalFontFamily")
+      .then((v) => {
+        if (typeof v === "string") setTerminalFontFamily(v);
+      })
+      .catch(() => { });
+    api.getPref("terminalFontSize")
+      .then((v) => {
+        if (typeof v === "number") setTerminalFontSize(v);
+      })
+      .catch(() => { });
+    api.listMonoFonts()
+      .then((fonts) => {
+        if (Array.isArray(fonts)) setMonoFonts(fonts);
+      })
+      .catch(() => { });
   }, []);
 
   async function handleThemeChange(mode: ThemeMode) {
@@ -193,6 +213,16 @@ function AppearancePane() {
   async function handleOpacityChange(value: number) {
     setCanvasOpacity(value);
     await api.setPref("canvasOpacity", value);
+  }
+
+  async function handleFontFamilyChange(value: string) {
+    setTerminalFontFamily(value);
+    await api.setPref("terminalFontFamily", value);
+  }
+
+  async function handleFontSizeChange(value: number) {
+    setTerminalFontSize(value);
+    await api.setPref("terminalFontSize", value);
   }
 
   return (
@@ -222,6 +252,47 @@ function AppearancePane() {
         <Slider
           value={canvasOpacity}
           onChange={(v) => { void handleOpacityChange(v); }}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Terminal font</p>
+        <div className="relative">
+        <select
+          value={terminalFontFamily}
+          onChange={(e) => { void handleFontFamilyChange(e.target.value); }}
+          aria-label="Terminal font"
+          className="w-full appearance-none rounded-md border border-border/50 bg-transparent px-2.5 py-1.5 pr-8 text-sm text-foreground focus:outline-none focus:border-foreground/25 cursor-pointer"
+        >
+          <option value="">Default (Menlo)</option>
+          {monoFonts.map((font) => (
+            <option key={font} value={font}>
+              {font}
+            </option>
+          ))}
+        </select>
+        <CaretDown
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground"
+          weight="bold"
+        />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Changes apply to new terminals.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium">Terminal font size</p>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {terminalFontSize}px
+          </span>
+        </div>
+        <Slider
+          value={terminalFontSize}
+          min={6}
+          max={32}
+          onChange={(v) => { void handleFontSizeChange(v); }}
         />
       </div>
     </div>
