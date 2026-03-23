@@ -111,6 +111,7 @@ export interface CollabApi {
     key: string,
     value: unknown,
   ) => Promise<void>;
+  listMonoFonts: () => Promise<string[]>;
 
   // Theme
   setTheme: (mode: string) => Promise<void>;

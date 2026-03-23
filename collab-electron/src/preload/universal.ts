@@ -113,6 +113,8 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("workspace-pref:get", key),
   setWorkspacePref: (key: string, value: unknown) =>
     ipcRenderer.invoke("workspace-pref:set", key, value),
+  listMonoFonts: () =>
+    ipcRenderer.invoke("fonts:list-mono"),
 
   // Nav + Viewer
   getSelectedFile: () =>
