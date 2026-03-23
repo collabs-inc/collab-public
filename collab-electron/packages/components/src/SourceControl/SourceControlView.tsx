@@ -15,7 +15,6 @@ import { ChangeSectionHeader } from './ChangeSectionHeader';
 import { FileChangeRow } from './FileChangeRow';
 import { SyncBar } from './SyncBar';
 import { BranchPicker } from './BranchPicker';
-import { StashSection } from './StashSection';
 import { DiffView } from './DiffView';
 
 interface SourceControlViewProps {
@@ -458,17 +457,23 @@ export function SourceControlView({
 					))}
 				</ChangeSectionHeader>
 
-				{/* Unstaged changes */}
+				{/* Changes (unstaged + untracked combined) */}
 				<ChangeSectionHeader
 					title="Changes"
-					count={status.unstaged.length}
+					count={
+						status.unstaged.length +
+						status.untracked.length
+					}
 					actionIcon="stage"
 					onAction={() =>
-						handleStage(
-							status.unstaged.map(
+						handleStage([
+							...status.unstaged.map(
 								(f) => f.path,
 							),
-						)
+							...status.untracked.map(
+								(f) => f.path,
+							),
+						])
 					}
 				>
 					{status.unstaged.map((file) => (
@@ -493,21 +498,6 @@ export function SourceControlView({
 							}
 						/>
 					))}
-				</ChangeSectionHeader>
-
-				{/* Untracked files */}
-				<ChangeSectionHeader
-					title="Untracked"
-					count={status.untracked.length}
-					actionIcon="stage"
-					onAction={() =>
-						handleStage(
-							status.untracked.map(
-								(f) => f.path,
-							),
-						)
-					}
-				>
 					{status.untracked.map((file) => (
 						<FileChangeRow
 							key={`untracked-${file.path}`}
@@ -524,13 +514,6 @@ export function SourceControlView({
 						/>
 					))}
 				</ChangeSectionHeader>
-
-				{/* Stash section */}
-				<StashSection
-					isActive={isActive ?? false}
-					onRefresh={refresh}
-					onError={setError}
-				/>
 			</div>
 
 			{/* Diff viewer */}
