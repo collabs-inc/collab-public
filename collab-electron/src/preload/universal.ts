@@ -714,8 +714,8 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("git:generate-commit-message"),
   aiValidateKey: (key: string) =>
     ipcRenderer.invoke("ai:validate-key", key),
-  aiHasKey: () =>
-    ipcRenderer.invoke("ai:has-key"),
+  aiCanGenerate: () =>
+    ipcRenderer.invoke("ai:can-generate"),
 });
 
 // Forward ctrl+wheel (trackpad pinch) from tile webviews to the canvas

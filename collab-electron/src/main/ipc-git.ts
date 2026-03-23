@@ -10,10 +10,14 @@ import {
   gitDiscardAll,
   gitCommit,
   gitDiff,
+  gitDiffAll,
   gitDiffCached,
 } from "./git-source-control";
 import {
-  generateCommitMessage,
+  getAvailableAgent,
+  canGenerate,
+  generateCommitMessageViaCli,
+  generateCommitMessageViaApi,
   validateApiKey,
 } from "./ai-commit";
 
@@ -108,17 +112,31 @@ export function registerGitHandlers(ctx: IpcGitContext): void {
   ipcMain.handle("git:generate-commit-message", async () => {
     const cwd = activeWorkspacePath(ctx.config());
     if (!cwd) throw new Error("No active workspace");
-    const apiKey = ctx.config().ui?.["ai.apiKey"];
-    if (typeof apiKey !== "string" || !apiKey) {
-      throw new Error(
-        "No API key configured. Add your Anthropic API key in Settings → AI.",
-      );
-    }
-    const diff = await gitDiffCached(cwd);
+
+    let diff = await gitDiffCached(cwd);
     if (!diff.trim()) {
-      throw new Error("No staged changes found. Stage files first.");
+      const status = await gitStatus(cwd);
+      if (status.unstaged.length > 0 || status.untracked.length > 0) {
+        diff = await gitDiffAll(cwd);
+      }
     }
-    return generateCommitMessage(apiKey, diff);
+    if (!diff.trim()) {
+      throw new Error("No changes found to generate a message from.");
+    }
+
+    const agent = getAvailableAgent();
+    if (agent) {
+      return generateCommitMessageViaCli(agent, diff);
+    }
+
+    const apiKey = ctx.config().ui?.["ai.apiKey"];
+    if (typeof apiKey === "string" && apiKey) {
+      return generateCommitMessageViaApi(apiKey, diff);
+    }
+
+    throw new Error(
+      "No AI agent found. Install Claude Code, Codex, or Gemini CLI — or add an API key in Settings → AI.",
+    );
   });
 
   ipcMain.handle(
@@ -131,5 +149,10 @@ export function registerGitHandlers(ctx: IpcGitContext): void {
   ipcMain.handle("ai:has-key", () => {
     const key = ctx.config().ui?.["ai.apiKey"];
     return typeof key === "string" && key.length > 0;
+  });
+
+  ipcMain.handle("ai:can-generate", () => {
+    const apiKey = ctx.config().ui?.["ai.apiKey"];
+    return canGenerate(typeof apiKey === "string" ? apiKey : undefined);
   });
 }

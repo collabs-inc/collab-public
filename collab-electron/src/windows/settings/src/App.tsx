@@ -679,11 +679,28 @@ function AiPane() {
         </p>
       </div>
 
+      <div
+        className="rounded-md px-3 py-2.5 text-xs"
+        style={{
+          backgroundColor:
+            "color-mix(in srgb, var(--foreground) 5%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--border) 40%, transparent)",
+          color: "var(--muted-foreground)",
+          lineHeight: 1.5,
+        }}
+      >
+        If you have <strong style={{ color: "var(--foreground)" }}>Claude Code</strong>,{" "}
+        <strong style={{ color: "var(--foreground)" }}>Codex CLI</strong>, or{" "}
+        <strong style={{ color: "var(--foreground)" }}>Gemini CLI</strong> installed,
+        commit messages will use your existing subscription automatically.
+        An API key is only needed as a fallback.
+      </div>
+
       <div className="space-y-3">
         <div className="space-y-1">
-          <p className="text-sm font-medium">Anthropic API Key</p>
+          <p className="text-sm font-medium">Anthropic API Key (Fallback)</p>
           <p className="text-xs text-muted-foreground">
-            Used for AI-generated commit messages in Source Control.
+            Only used if no CLI agent is installed.
           </p>
         </div>
 

@@ -308,6 +308,11 @@ export async function gitDiff(
   return git(args, cwd);
 }
 
+export async function gitDiffAll(cwd: string): Promise<string> {
+  assertGitRepo(cwd);
+  return git(["diff"], cwd);
+}
+
 export async function gitDiffCached(cwd: string): Promise<string> {
   assertGitRepo(cwd);
   return git(["diff", "--cached"], cwd);

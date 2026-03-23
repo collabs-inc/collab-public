@@ -20,7 +20,7 @@ interface AgentStatus {
 }
 
 
-function agentDetected(id: AgentId): boolean {
+export function agentDetected(id: AgentId): boolean {
   const home = homedir();
   switch (id) {
     case "claude":

@@ -388,7 +388,10 @@ export interface CollabApi {
   aiValidateKey: (
     key: string,
   ) => Promise<{ valid: boolean }>;
-  aiHasKey: () => Promise<boolean>;
+  aiCanGenerate: () => Promise<{
+    available: boolean;
+    agent?: string;
+  }>;
 }
 
 declare global {

@@ -1,9 +1,9 @@
-const MAX_DIFF_CHARS = 100_000;
-const API_URL = "https://api.anthropic.com/v1/messages";
-const API_VERSION = "2023-06-01";
-const MODEL = "claude-sonnet-4-20250514";
+import { spawn } from "node:child_process";
+import { agentDetected, type AgentId } from "./integrations";
 
-const SYSTEM_PROMPT = `You are a commit message generator. Analyze the provided git diff and write a concise, conventional commit message.
+const MAX_DIFF_CHARS = 100_000;
+
+const COMMIT_PROMPT = `You are a commit message generator. Analyze the provided git diff and write a concise, conventional commit message.
 
 Rules:
 1. Use conventional commits format: type(scope): description
@@ -37,6 +37,132 @@ function prepareDiff(rawDiff: string): string {
   return `${truncated}\n\n[TRUNCATED -- showing first ${cutLine} of ${lines.length} lines]`;
 }
 
+// -- Agent detection --
+
+const AGENT_PRIORITY: AgentId[] = ["claude", "codex", "gemini"];
+
+export function getAvailableAgent(): AgentId | null {
+  for (const id of AGENT_PRIORITY) {
+    if (agentDetected(id)) return id;
+  }
+  return null;
+}
+
+export function canGenerate(apiKey?: string): {
+  available: boolean;
+  agent?: string;
+} {
+  const agent = getAvailableAgent();
+  if (agent) {
+    const names: Record<AgentId, string> = {
+      claude: "Claude Code",
+      codex: "Codex CLI",
+      gemini: "Gemini CLI",
+    };
+    return { available: true, agent: names[agent] };
+  }
+  if (typeof apiKey === "string" && apiKey.length > 0) {
+    return { available: true, agent: "Anthropic API" };
+  }
+  return { available: false };
+}
+
+// -- CLI-based generation --
+
+function runCliAgent(
+  command: string,
+  args: string[],
+  stdinData: string,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args, {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env },
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    proc.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+
+    proc.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+
+    proc.on("error", (err) => {
+      reject(
+        new Error(`Failed to run ${command}: ${err.message}`),
+      );
+    });
+
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        reject(
+          new Error(
+            `${command} exited with code ${code}: ${stderr.slice(0, 500)}`,
+          ),
+        );
+        return;
+      }
+      resolve(stdout.trim());
+    });
+
+    proc.stdin.write(stdinData);
+    proc.stdin.end();
+  });
+}
+
+export async function generateCommitMessageViaCli(
+  agent: AgentId,
+  diff: string,
+): Promise<{ message: string; agent: string }> {
+  const preparedDiff = prepareDiff(diff);
+  const fullPrompt = `${COMMIT_PROMPT}\n\nHere is the git diff:\n\n${preparedDiff}`;
+
+  let result: string;
+
+  switch (agent) {
+    case "claude":
+      result = await runCliAgent("claude", ["-p", fullPrompt], "");
+      break;
+    case "codex":
+      result = await runCliAgent(
+        "codex",
+        ["--quiet", "--prompt", fullPrompt],
+        "",
+      );
+      break;
+    case "gemini":
+      result = await runCliAgent(
+        "gemini",
+        ["--prompt", fullPrompt],
+        "",
+      );
+      break;
+  }
+
+  // Clean up any markdown fences the CLI might add
+  let message = result;
+  if (message.startsWith("```") && message.endsWith("```")) {
+    message = message.slice(3, -3).trim();
+  }
+  // Remove leading language identifier if present
+  if (message.startsWith("```")) {
+    const newlineIdx = message.indexOf("\n");
+    message = message.slice(newlineIdx + 1).trim();
+  }
+
+  return { message, agent };
+}
+
+// -- API key fallback --
+
+const API_URL = "https://api.anthropic.com/v1/messages";
+const API_VERSION = "2023-06-01";
+const MODEL = "claude-sonnet-4-20250514";
+
 interface ApiResponse {
   content: Array<{ type: string; text: string }>;
   model: string;
@@ -46,10 +172,10 @@ interface ApiError {
   error?: { type: string; message: string };
 }
 
-export async function generateCommitMessage(
+export async function generateCommitMessageViaApi(
   apiKey: string,
   diff: string,
-): Promise<{ message: string; model: string }> {
+): Promise<{ message: string; agent: string }> {
   const preparedDiff = prepareDiff(diff);
 
   const res = await fetch(API_URL, {
@@ -62,7 +188,7 @@ export async function generateCommitMessage(
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 512,
-      system: SYSTEM_PROMPT,
+      system: COMMIT_PROMPT,
       messages: [{ role: "user", content: preparedDiff }],
     }),
   });
@@ -83,7 +209,7 @@ export async function generateCommitMessage(
   const text =
     data.content.find((c) => c.type === "text")?.text ?? "";
 
-  return { message: text.trim(), model: data.model };
+  return { message: text.trim(), agent: "Anthropic API" };
 }
 
 export async function validateApiKey(

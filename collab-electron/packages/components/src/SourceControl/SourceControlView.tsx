@@ -32,7 +32,8 @@ export function SourceControlView({
 	const [commitMessage, setCommitMessage] = useState('');
 	const [committing, setCommitting] = useState(false);
 	const [generating, setGenerating] = useState(false);
-	const [hasApiKey, setHasApiKey] = useState(false);
+	const [canGenerate, setCanGenerate] = useState(false);
+	const [agentName, setAgentName] = useState<string | undefined>();
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState<string | null>(
 		null,
@@ -60,8 +61,11 @@ export function SourceControlView({
 	useEffect(() => {
 		refresh();
 		window.api
-			.aiHasKey()
-			.then(setHasApiKey)
+			.aiCanGenerate()
+			.then((result) => {
+				setCanGenerate(result.available);
+				setAgentName(result.agent);
+			})
 			.catch(() => {});
 	}, [workspacePath, refresh]);
 
@@ -230,6 +234,11 @@ export function SourceControlView({
 	}
 
 	const hasStagedChanges = status.staged.length > 0;
+	const hasAnyChanges =
+		status.staged.length +
+			status.unstaged.length +
+			status.untracked.length >
+		0;
 	const totalChanges =
 		status.staged.length +
 		status.unstaged.length +
@@ -286,7 +295,9 @@ export function SourceControlView({
 				message={commitMessage}
 				onMessageChange={setCommitMessage}
 				hasStagedChanges={hasStagedChanges}
-				hasApiKey={hasApiKey}
+				canGenerate={canGenerate}
+				agentName={agentName}
+				hasAnyChanges={hasAnyChanges}
 				onCommit={handleCommit}
 				onGenerateMessage={handleGenerateMessage}
 				committing={committing}

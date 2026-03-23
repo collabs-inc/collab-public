@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
 	Check,
 	Sparkle,
@@ -9,7 +9,9 @@ interface CommitBoxProps {
 	message: string;
 	onMessageChange: (message: string) => void;
 	hasStagedChanges: boolean;
-	hasApiKey: boolean;
+	canGenerate: boolean;
+	agentName?: string;
+	hasAnyChanges: boolean;
 	onCommit: () => void;
 	onGenerateMessage: () => void;
 	committing: boolean;
@@ -20,7 +22,9 @@ export function CommitBox({
 	message,
 	onMessageChange,
 	hasStagedChanges,
-	hasApiKey,
+	canGenerate,
+	agentName,
+	hasAnyChanges,
 	onCommit,
 	onGenerateMessage,
 	committing,
@@ -42,6 +46,17 @@ export function CommitBox({
 		},
 		[canCommit, onCommit],
 	);
+
+	const aiDisabled =
+		!canGenerate || !hasAnyChanges || generating;
+
+	let aiTitle = 'Generate commit message with AI';
+	if (!canGenerate) {
+		aiTitle =
+			'Install Claude Code, Codex, or Gemini CLI to generate commit messages';
+	} else if (agentName) {
+		aiTitle = `Generate commit message with ${agentName}`;
+	}
 
 	return (
 		<div className="scm-commit-box">
@@ -78,17 +93,9 @@ export function CommitBox({
 				<button
 					type="button"
 					className={`scm-ai-button${generating ? ' generating' : ''}`}
-					disabled={
-						!hasStagedChanges ||
-						!hasApiKey ||
-						generating
-					}
+					disabled={aiDisabled}
 					onClick={onGenerateMessage}
-					title={
-						!hasApiKey
-							? 'Set API key in Settings → AI'
-							: 'Generate commit message with AI'
-					}
+					title={aiTitle}
 				>
 					{generating ? (
 						<CircleNotch
