@@ -12,7 +12,7 @@ import {
   webContents as webContentsModule,
   type WebContents,
 } from "electron";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -532,6 +532,33 @@ ipcMain.handle(
       mainWindow.webContents.send("pref:changed", key, value);
     }
   },
+);
+
+ipcMain.handle("fonts:list-mono", () =>
+  new Promise<string[]>((resolve) => {
+    execFile(
+      "fc-list",
+      ["--format=%{family[0]}\\n", ":spacing=mono"],
+      { encoding: "utf-8", timeout: 5000 },
+      (err, stdout) => {
+        if (err) {
+          // fc-list requires fontconfig — not available on stock macOS.
+          // Return empty so the UI falls back to "Default (Menlo)".
+          resolve([]);
+          return;
+        }
+        const families = [
+          ...new Set(
+            stdout
+              .split("\n")
+              .map((l) => l.trim())
+              .filter((f) => f && !f.startsWith(".")),
+          ),
+        ].sort((a, b) => a.localeCompare(b));
+        resolve(families);
+      },
+    );
+  }),
 );
 
 ipcMain.handle(
