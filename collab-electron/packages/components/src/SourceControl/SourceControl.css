@@ -357,3 +357,367 @@
 	animation: scm-spin 1s linear infinite;
 	display: inline-flex;
 }
+
+/* Sync bar */
+.scm-sync-bar {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 12px;
+	border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.scm-sync-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 3px;
+	padding: 4px 8px;
+	border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+	border-radius: 5px;
+	background: none;
+	color: var(--muted-foreground);
+	cursor: pointer;
+	font-size: 11px;
+}
+
+.scm-sync-button:hover:not(:disabled) {
+	color: var(--foreground);
+	background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.scm-sync-button:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+.scm-sync-button.publish {
+	flex: 1;
+	gap: 5px;
+}
+
+.scm-sync-badge {
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 10px;
+	font-weight: 700;
+	min-width: 14px;
+	text-align: center;
+}
+
+/* Branch picker */
+.scm-branch-picker {
+	position: relative;
+}
+
+.scm-branch-trigger {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	background: none;
+	border: none;
+	padding: 0;
+	cursor: pointer;
+	color: inherit;
+	font: inherit;
+}
+
+.scm-branch-trigger:hover .scm-branch-name {
+	text-decoration: underline;
+}
+
+.scm-branch-dropdown {
+	position: absolute;
+	top: calc(100% + 6px);
+	left: 0;
+	width: 240px;
+	max-height: 320px;
+	background: var(--background);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+	z-index: 100;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+.scm-branch-search {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 10px;
+	border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+	color: var(--muted-foreground);
+}
+
+.scm-branch-search-input {
+	flex: 1;
+	border: none;
+	background: none;
+	outline: none;
+	font-size: 12px;
+	color: var(--foreground);
+}
+
+.scm-branch-search-input::placeholder {
+	color: var(--muted-foreground);
+	opacity: 0.6;
+}
+
+.scm-branch-list {
+	flex: 1;
+	overflow-y: auto;
+	max-height: 220px;
+}
+
+.scm-branch-group {
+	padding: 4px 0;
+}
+
+.scm-branch-group-label {
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--muted-foreground);
+	padding: 4px 10px 2px;
+}
+
+.scm-branch-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 10px;
+	font-size: 12px;
+	cursor: pointer;
+	color: var(--foreground);
+}
+
+.scm-branch-item:hover {
+	background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.scm-branch-item.current {
+	font-weight: 600;
+}
+
+.scm-branch-item-name {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.scm-branch-delete {
+	display: flex;
+	opacity: 0;
+	border: none;
+	background: none;
+	cursor: pointer;
+	color: var(--muted-foreground);
+	padding: 2px;
+	border-radius: 3px;
+}
+
+.scm-branch-item:hover .scm-branch-delete {
+	opacity: 1;
+}
+
+.scm-branch-delete:hover {
+	color: var(--destructive);
+}
+
+.scm-branch-footer {
+	border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+	padding: 4px 0;
+}
+
+.scm-branch-item.create {
+	color: var(--muted-foreground);
+	font-size: 11px;
+}
+
+.scm-branch-create-input {
+	padding: 4px 10px;
+}
+
+/* Stash section */
+.scm-stash-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 12px 3px 24px;
+	font-size: 12px;
+}
+
+.scm-stash-row:hover {
+	background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.scm-stash-message {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--foreground);
+}
+
+.scm-stash-actions {
+	display: flex;
+	gap: 2px;
+	opacity: 0;
+}
+
+.scm-stash-row:hover .scm-stash-actions {
+	opacity: 1;
+}
+
+.scm-stash-empty {
+	padding: 8px 24px;
+	font-size: 11px;
+	color: var(--muted-foreground);
+}
+
+.scm-stash-input-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 12px 4px 24px;
+}
+
+.scm-stash-input {
+	flex: 1;
+	border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+	background: color-mix(in srgb, var(--foreground) 5%, transparent);
+	border-radius: 4px;
+	padding: 4px 8px;
+	font-size: 11px;
+	color: var(--foreground);
+	outline: none;
+}
+
+.scm-stash-save-btn {
+	border: none;
+	background: var(--foreground);
+	color: var(--background);
+	border-radius: 4px;
+	padding: 4px 8px;
+	font-size: 11px;
+	font-weight: 500;
+	cursor: pointer;
+}
+
+/* Diff view */
+.scm-diff-container {
+	display: flex;
+	flex-direction: column;
+	border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+	max-height: 50%;
+	min-height: 120px;
+}
+
+.scm-diff-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+	flex-shrink: 0;
+}
+
+.scm-diff-title {
+	font-size: 11px;
+	font-weight: 600;
+	font-family: 'IBM Plex Mono', monospace;
+	color: var(--foreground);
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.scm-diff-header-actions {
+	display: flex;
+	gap: 2px;
+}
+
+.scm-diff-action {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 2px;
+	border: none;
+	background: none;
+	cursor: pointer;
+	color: var(--muted-foreground);
+	border-radius: 4px;
+}
+
+.scm-diff-action:hover {
+	color: var(--foreground);
+	background: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.scm-diff-close {
+	display: flex;
+	align-items: center;
+	padding: 2px;
+	border: none;
+	background: none;
+	cursor: pointer;
+	color: var(--muted-foreground);
+	border-radius: 4px;
+}
+
+.scm-diff-close:hover {
+	color: var(--foreground);
+}
+
+.scm-diff-content {
+	flex: 1;
+	overflow: auto;
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 11px;
+	line-height: 1.5;
+}
+
+.scm-diff-line {
+	padding: 0 12px;
+	white-space: pre;
+}
+
+.scm-diff-line-text {
+	display: inline;
+}
+
+.scm-diff-add {
+	background: color-mix(in srgb, #4ade80 15%, transparent);
+	color: #4ade80;
+}
+
+.scm-diff-remove {
+	background: color-mix(in srgb, var(--destructive) 15%, transparent);
+	color: var(--destructive);
+}
+
+.scm-diff-header {
+	color: var(--muted-foreground);
+	font-weight: 600;
+}
+
+.scm-diff-meta {
+	color: var(--muted-foreground);
+	font-style: italic;
+}
+
+.scm-diff-context {
+	color: var(--foreground);
+	opacity: 0.6;
+}
+
+.scm-diff-empty {
+	padding: 16px 12px;
+	font-size: 12px;
+	color: var(--muted-foreground);
+	text-align: center;
+}

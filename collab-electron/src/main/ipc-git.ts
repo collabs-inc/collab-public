@@ -12,6 +12,22 @@ import {
   gitDiff,
   gitDiffAll,
   gitDiffCached,
+  gitPush,
+  gitPushSetUpstream,
+  gitPull,
+  gitFetch,
+  gitRemotes,
+  gitHasUpstream,
+  gitBranches,
+  gitCheckout,
+  gitCreateBranch,
+  gitDeleteBranch,
+  gitStashSave,
+  gitStashList,
+  gitStashPop,
+  gitStashApply,
+  gitStashDrop,
+  gitShowFile,
 } from "./git-source-control";
 import {
   getAvailableAgent,
@@ -155,4 +171,127 @@ export function registerGitHandlers(ctx: IpcGitContext): void {
     const apiKey = ctx.config().ui?.["ai.apiKey"];
     return canGenerate(typeof apiKey === "string" ? apiKey : undefined);
   });
+
+  ipcMain.handle("git:push", async () => {
+    const cwd = activeWorkspacePath(ctx.config());
+    if (!cwd) throw new Error("No active workspace");
+    await gitPush(cwd);
+  });
+
+  ipcMain.handle(
+    "git:push-set-upstream",
+    async (_event, remote: string, branch: string) => {
+      const cwd = activeWorkspacePath(ctx.config());
+      if (!cwd) throw new Error("No active workspace");
+      await gitPushSetUpstream(cwd, remote, branch);
+    },
+  );
+
+  ipcMain.handle("git:pull", async () => {
+    const cwd = activeWorkspacePath(ctx.config());
+    if (!cwd) throw new Error("No active workspace");
+    await gitPull(cwd);
+  });
+
+  ipcMain.handle("git:fetch", async () => {
+    const cwd = activeWorkspacePath(ctx.config());
+    if (!cwd) throw new Error("No active workspace");
+    await gitFetch(cwd);
+  });
+
+  ipcMain.handle("git:remotes", async () => {
+    const cwd = activeWorkspacePath(ctx.config());
+    if (!cwd) return [];
+    return gitRemotes(cwd);
+  });
+
+  ipcMain.handle("git:has-upstream", async () => {
+    const cwd = activeWorkspacePath(ctx.config());
+    if (!cwd) return false;
+    return gitHasUpstream(cwd);
+  });
+
+  ipcMain.handle("git:branches", async () => {
+    const cwd = activeWorkspacePath(ctx.config());
+    if (!cwd) return [];
+    return gitBranches(cwd);
+  });
+
+  ipcMain.handle(
+    "git:checkout",
+    async (_event, branch: string) => {
+      const cwd = activeWorkspacePath(ctx.config());
+      if (!cwd) throw new Error("No active workspace");
+      await gitCheckout(cwd, branch);
+    },
+  );
+
+  ipcMain.handle(
+    "git:create-branch",
+    async (_event, name: string, startPoint?: string) => {
+      const cwd = activeWorkspacePath(ctx.config());
+      if (!cwd) throw new Error("No active workspace");
+      await gitCreateBranch(cwd, name, startPoint);
+    },
+  );
+
+  ipcMain.handle(
+    "git:delete-branch",
+    async (_event, name: string) => {
+      const cwd = activeWorkspacePath(ctx.config());
+      if (!cwd) throw new Error("No active workspace");
+      await gitDeleteBranch(cwd, name);
+    },
+  );
+
+  ipcMain.handle(
+    "git:stash-save",
+    async (_event, message?: string) => {
+      const cwd = activeWorkspacePath(ctx.config());
+      if (!cwd) throw new Error("No active workspace");
+      await gitStashSave(cwd, message);
+    },
+  );
+
+  ipcMain.handle("git:stash-list", async () => {
+    const cwd = activeWorkspacePath(ctx.config());
+    if (!cwd) return [];
+    return gitStashList(cwd);
+  });
+
+  ipcMain.handle(
+    "git:stash-pop",
+    async (_event, index: number) => {
+      const cwd = activeWorkspacePath(ctx.config());
+      if (!cwd) throw new Error("No active workspace");
+      await gitStashPop(cwd, index);
+    },
+  );
+
+  ipcMain.handle(
+    "git:stash-apply",
+    async (_event, index: number) => {
+      const cwd = activeWorkspacePath(ctx.config());
+      if (!cwd) throw new Error("No active workspace");
+      await gitStashApply(cwd, index);
+    },
+  );
+
+  ipcMain.handle(
+    "git:stash-drop",
+    async (_event, index: number) => {
+      const cwd = activeWorkspacePath(ctx.config());
+      if (!cwd) throw new Error("No active workspace");
+      await gitStashDrop(cwd, index);
+    },
+  );
+
+  ipcMain.handle(
+    "git:show-file",
+    async (_event, ref: string, filePath: string) => {
+      const cwd = activeWorkspacePath(ctx.config());
+      if (!cwd) throw new Error("No active workspace");
+      return gitShowFile(cwd, ref, filePath);
+    },
+  );
 }

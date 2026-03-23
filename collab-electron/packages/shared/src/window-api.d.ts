@@ -4,7 +4,12 @@ import type {
   TreeNode,
 } from "./types";
 import type { ReplayMessage } from "./replay-types";
-import type { GitStatusResult } from "./git-types";
+import type {
+  GitStatusResult,
+  GitBranch,
+  GitRemote,
+  GitStash,
+} from "./git-types";
 
 type Unsubscribe = () => void;
 
@@ -392,6 +397,39 @@ export interface CollabApi {
     available: boolean;
     agent?: string;
   }>;
+
+  // Push / Pull / Fetch
+  gitPush: () => Promise<void>;
+  gitPushSetUpstream: (
+    remote: string,
+    branch: string,
+  ) => Promise<void>;
+  gitPull: () => Promise<void>;
+  gitFetch: () => Promise<void>;
+  gitRemotes: () => Promise<GitRemote[]>;
+  gitHasUpstream: () => Promise<boolean>;
+
+  // Branch operations
+  gitBranches: () => Promise<GitBranch[]>;
+  gitCheckout: (branch: string) => Promise<void>;
+  gitCreateBranch: (
+    name: string,
+    startPoint?: string,
+  ) => Promise<void>;
+  gitDeleteBranch: (name: string) => Promise<void>;
+
+  // Stash operations
+  gitStashSave: (message?: string) => Promise<void>;
+  gitStashList: () => Promise<GitStash[]>;
+  gitStashPop: (index: number) => Promise<void>;
+  gitStashApply: (index: number) => Promise<void>;
+  gitStashDrop: (index: number) => Promise<void>;
+
+  // Show file at ref (for diff viewer)
+  gitShowFile: (
+    ref: string,
+    filePath: string,
+  ) => Promise<string>;
 }
 
 declare global {

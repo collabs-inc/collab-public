@@ -17,3 +17,22 @@ export interface GitStatusResult {
   untracked: GitFileChange[];
   isGitRepo: boolean;
 }
+
+export interface GitBranch {
+  name: string;
+  current: boolean;
+  upstream?: string;
+  isRemote: boolean;
+}
+
+export interface GitRemote {
+  name: string;
+  fetchUrl: string;
+  pushUrl: string;
+}
+
+export interface GitStash {
+  index: number;
+  message: string;
+  date: string;
+}

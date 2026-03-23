@@ -6,6 +6,9 @@ import type {
   GitChangeStatus,
   GitFileChange,
   GitStatusResult,
+  GitBranch,
+  GitRemote,
+  GitStash,
 } from "@collab/shared/git-types";
 
 const execFileAsync = promisify(execFile);
@@ -316,4 +319,213 @@ export async function gitDiffAll(cwd: string): Promise<string> {
 export async function gitDiffCached(cwd: string): Promise<string> {
   assertGitRepo(cwd);
   return git(["diff", "--cached"], cwd);
+}
+
+// -- Push / Pull / Fetch --
+
+export async function gitPush(cwd: string): Promise<void> {
+  assertGitRepo(cwd);
+  await git(["push"], cwd);
+}
+
+export async function gitPushSetUpstream(
+  cwd: string,
+  remote: string,
+  branch: string,
+): Promise<void> {
+  assertGitRepo(cwd);
+  await git(["push", "-u", remote, branch], cwd);
+}
+
+export async function gitPull(cwd: string): Promise<void> {
+  assertGitRepo(cwd);
+  await git(["pull"], cwd);
+}
+
+export async function gitFetch(cwd: string): Promise<void> {
+  assertGitRepo(cwd);
+  await git(["fetch", "--all"], cwd);
+}
+
+export async function gitRemotes(
+  cwd: string,
+): Promise<GitRemote[]> {
+  assertGitRepo(cwd);
+  const raw = await git(["remote", "-v"], cwd);
+  const map = new Map<string, GitRemote>();
+
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    const match = line.match(/^(\S+)\s+(\S+)\s+\((fetch|push)\)$/);
+    if (!match) continue;
+    const [, name, url, type] = match;
+    let remote = map.get(name!);
+    if (!remote) {
+      remote = { name: name!, fetchUrl: "", pushUrl: "" };
+      map.set(name!, remote);
+    }
+    if (type === "fetch") remote.fetchUrl = url!;
+    else remote.pushUrl = url!;
+  }
+
+  return Array.from(map.values());
+}
+
+export async function gitHasUpstream(cwd: string): Promise<boolean> {
+  assertGitRepo(cwd);
+  try {
+    await git(
+      ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+      cwd,
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// -- Branch operations --
+
+export async function gitBranches(
+  cwd: string,
+): Promise<GitBranch[]> {
+  assertGitRepo(cwd);
+  const raw = await git(
+    [
+      "branch",
+      "-a",
+      "--format=%(refname:short)|%(HEAD)|%(upstream:short)",
+    ],
+    cwd,
+  );
+
+  const branches: GitBranch[] = [];
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    const parts = line.split("|");
+    const name = parts[0]!.trim();
+    const isCurrent = parts[1]?.trim() === "*";
+    const upstream = parts[2]?.trim() || undefined;
+    const isRemote = name.startsWith("origin/") || name.includes("/");
+
+    // Skip HEAD pointers like "origin/HEAD"
+    if (name.endsWith("/HEAD")) continue;
+
+    branches.push({ name, current: isCurrent, upstream, isRemote });
+  }
+
+  return branches;
+}
+
+export async function gitCheckout(
+  cwd: string,
+  branch: string,
+): Promise<void> {
+  assertGitRepo(cwd);
+  await git(["checkout", branch], cwd);
+}
+
+export async function gitCreateBranch(
+  cwd: string,
+  name: string,
+  startPoint?: string,
+): Promise<void> {
+  assertGitRepo(cwd);
+  const args = ["checkout", "-b", name];
+  if (startPoint) args.push(startPoint);
+  await git(args, cwd);
+}
+
+export async function gitDeleteBranch(
+  cwd: string,
+  name: string,
+): Promise<void> {
+  assertGitRepo(cwd);
+  await git(["branch", "-d", name], cwd);
+}
+
+// -- Stash operations --
+
+export async function gitStashSave(
+  cwd: string,
+  message?: string,
+): Promise<void> {
+  assertGitRepo(cwd);
+  const args = ["stash", "push"];
+  if (message) args.push("-m", message);
+  await git(args, cwd);
+}
+
+export async function gitStashList(
+  cwd: string,
+): Promise<GitStash[]> {
+  assertGitRepo(cwd);
+  let raw: string;
+  try {
+    raw = await git(
+      ["stash", "list", "--format=%gd|%s|%ai"],
+      cwd,
+    );
+  } catch {
+    return [];
+  }
+
+  const stashes: GitStash[] = [];
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    const parts = line.split("|");
+    if (parts.length < 3) continue;
+    const ref = parts[0]!; // stash@{0}
+    const indexMatch = ref.match(/\{(\d+)\}/);
+    const index = indexMatch ? parseInt(indexMatch[1]!, 10) : 0;
+    stashes.push({
+      index,
+      message: parts[1]!.trim(),
+      date: parts[2]!.trim(),
+    });
+  }
+
+  return stashes;
+}
+
+export async function gitStashPop(
+  cwd: string,
+  index: number,
+): Promise<void> {
+  assertGitRepo(cwd);
+  await git(["stash", "pop", `stash@{${index}}`], cwd);
+}
+
+export async function gitStashApply(
+  cwd: string,
+  index: number,
+): Promise<void> {
+  assertGitRepo(cwd);
+  await git(["stash", "apply", `stash@{${index}}`], cwd);
+}
+
+export async function gitStashDrop(
+  cwd: string,
+  index: number,
+): Promise<void> {
+  assertGitRepo(cwd);
+  await git(["stash", "drop", `stash@{${index}}`], cwd);
+}
+
+// -- Show file at ref --
+
+export async function gitShowFile(
+  cwd: string,
+  ref: string,
+  filePath: string,
+): Promise<string> {
+  assertGitRepo(cwd);
+  // ref = "HEAD" for committed, "" or ":" for index
+  const spec = ref ? `${ref}:${filePath}` : `:${filePath}`;
+  try {
+    return await git(["show", spec], cwd);
+  } catch {
+    // File doesn't exist at that ref (new file)
+    return "";
+  }
 }

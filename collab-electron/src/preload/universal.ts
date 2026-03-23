@@ -716,6 +716,46 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("ai:validate-key", key),
   aiCanGenerate: () =>
     ipcRenderer.invoke("ai:can-generate"),
+
+  // Push / Pull / Fetch
+  gitPush: () =>
+    ipcRenderer.invoke("git:push"),
+  gitPushSetUpstream: (remote: string, branch: string) =>
+    ipcRenderer.invoke("git:push-set-upstream", remote, branch),
+  gitPull: () =>
+    ipcRenderer.invoke("git:pull"),
+  gitFetch: () =>
+    ipcRenderer.invoke("git:fetch"),
+  gitRemotes: () =>
+    ipcRenderer.invoke("git:remotes"),
+  gitHasUpstream: () =>
+    ipcRenderer.invoke("git:has-upstream"),
+
+  // Branch operations
+  gitBranches: () =>
+    ipcRenderer.invoke("git:branches"),
+  gitCheckout: (branch: string) =>
+    ipcRenderer.invoke("git:checkout", branch),
+  gitCreateBranch: (name: string, startPoint?: string) =>
+    ipcRenderer.invoke("git:create-branch", name, startPoint),
+  gitDeleteBranch: (name: string) =>
+    ipcRenderer.invoke("git:delete-branch", name),
+
+  // Stash operations
+  gitStashSave: (message?: string) =>
+    ipcRenderer.invoke("git:stash-save", message),
+  gitStashList: () =>
+    ipcRenderer.invoke("git:stash-list"),
+  gitStashPop: (index: number) =>
+    ipcRenderer.invoke("git:stash-pop", index),
+  gitStashApply: (index: number) =>
+    ipcRenderer.invoke("git:stash-apply", index),
+  gitStashDrop: (index: number) =>
+    ipcRenderer.invoke("git:stash-drop", index),
+
+  // Show file at ref (for diff viewer)
+  gitShowFile: (ref: string, filePath: string) =>
+    ipcRenderer.invoke("git:show-file", ref, filePath),
 });
 
 // Forward ctrl+wheel (trackpad pinch) from tile webviews to the canvas

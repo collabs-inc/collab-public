@@ -13,6 +13,10 @@ import type { GitStatusResult } from '@collab/shared/git-types';
 import { CommitBox } from './CommitBox';
 import { ChangeSectionHeader } from './ChangeSectionHeader';
 import { FileChangeRow } from './FileChangeRow';
+import { SyncBar } from './SyncBar';
+import { BranchPicker } from './BranchPicker';
+import { StashSection } from './StashSection';
+import { DiffView } from './DiffView';
 
 interface SourceControlViewProps {
 	workspacePath: string;
@@ -38,12 +42,23 @@ export function SourceControlView({
 	const [success, setSuccess] = useState<string | null>(
 		null,
 	);
+	const [hasUpstream, setHasUpstream] = useState(false);
+	const [diffFile, setDiffFile] = useState<{
+		filePath: string;
+		absPath: string;
+		relativePath: string;
+		cached: boolean;
+	} | null>(null);
 	const refreshTimer = useRef<ReturnType<typeof setTimeout>>();
 
 	const refresh = useCallback(async () => {
 		try {
 			const result = await window.api.gitStatus();
 			setStatus(result);
+			window.api
+				.gitHasUpstream()
+				.then(setHasUpstream)
+				.catch(() => setHasUpstream(false));
 		} catch (err) {
 			setStatus({
 				branch: '',
@@ -201,6 +216,77 @@ export function SourceControlView({
 		}
 	}, []);
 
+	// Push / Pull / Sync handlers
+	const handlePush = useCallback(async () => {
+		await window.api.gitPush();
+		await refresh();
+	}, [refresh]);
+
+	const handlePull = useCallback(async () => {
+		await window.api.gitPull();
+		await refresh();
+	}, [refresh]);
+
+	const handleSync = useCallback(async () => {
+		await window.api.gitFetch();
+		await window.api.gitPull();
+		await window.api.gitPush();
+		await refresh();
+	}, [refresh]);
+
+	const handlePublish = useCallback(async () => {
+		const remotes = await window.api.gitRemotes();
+		const remote = remotes[0]?.name ?? 'origin';
+		const branch = status?.branch ?? 'main';
+		await window.api.gitPushSetUpstream(
+			remote,
+			branch,
+		);
+		await refresh();
+	}, [status?.branch, refresh]);
+
+	// Branch handlers
+	const handleBranchSwitch = useCallback(
+		async (branch: string) => {
+			await window.api.gitCheckout(branch);
+			await refresh();
+		},
+		[refresh],
+	);
+
+	const handleBranchCreate = useCallback(
+		async (name: string) => {
+			await window.api.gitCreateBranch(name);
+			await refresh();
+		},
+		[refresh],
+	);
+
+	const handleBranchDelete = useCallback(
+		async (name: string) => {
+			await window.api.gitDeleteBranch(name);
+			await refresh();
+		},
+		[refresh],
+	);
+
+	// Diff handler
+	const handleFileClick = useCallback(
+		(
+			absPath: string,
+			relativePath: string,
+			cached: boolean,
+		) => {
+			setDiffFile({
+				filePath: absPath,
+				absPath,
+				relativePath,
+				cached,
+			});
+		},
+		[],
+	);
+
 	// Not a git repo
 	if (status && !status.isGitRepo) {
 		return (
@@ -264,22 +350,13 @@ export function SourceControlView({
 
 			{/* Branch header */}
 			<div className="scm-header">
-				<GitBranch size={14} weight="bold" />
-				<span className="scm-branch-name">
-					{status.branch || 'HEAD'}
-				</span>
-				{(status.ahead > 0 ||
-					status.behind > 0) && (
-					<span className="scm-sync-info">
-						{status.ahead > 0 &&
-							`${status.ahead}↑`}
-						{status.ahead > 0 &&
-							status.behind > 0 &&
-							' '}
-						{status.behind > 0 &&
-							`${status.behind}↓`}
-					</span>
-				)}
+				<BranchPicker
+					currentBranch={status.branch}
+					onSwitch={handleBranchSwitch}
+					onCreate={handleBranchCreate}
+					onDelete={handleBranchDelete}
+					onError={setError}
+				/>
 				<button
 					type="button"
 					className="scm-refresh-button"
@@ -289,6 +366,19 @@ export function SourceControlView({
 					<ArrowsClockwise size={14} />
 				</button>
 			</div>
+
+			{/* Sync bar */}
+			<SyncBar
+				ahead={status.ahead}
+				behind={status.behind}
+				hasUpstream={hasUpstream}
+				branch={status.branch}
+				onPush={handlePush}
+				onPull={handlePull}
+				onSync={handleSync}
+				onPublish={handlePublish}
+				onError={setError}
+			/>
 
 			{/* Commit box */}
 			<CommitBox
@@ -358,7 +448,11 @@ export function SourceControlView({
 								handleDiscard([file.path])
 							}
 							onClick={() =>
-								onSelectFile(file.absPath)
+								handleFileClick(
+									file.absPath,
+									file.path,
+									true,
+								)
 							}
 						/>
 					))}
@@ -391,7 +485,11 @@ export function SourceControlView({
 								handleDiscard([file.path])
 							}
 							onClick={() =>
-								onSelectFile(file.absPath)
+								handleFileClick(
+									file.absPath,
+									file.path,
+									false,
+								)
 							}
 						/>
 					))}
@@ -426,7 +524,25 @@ export function SourceControlView({
 						/>
 					))}
 				</ChangeSectionHeader>
+
+				{/* Stash section */}
+				<StashSection
+					isActive={isActive ?? false}
+					onRefresh={refresh}
+					onError={setError}
+				/>
 			</div>
+
+			{/* Diff viewer */}
+			{diffFile && (
+				<DiffView
+					filePath={diffFile.absPath}
+					relativePath={diffFile.relativePath}
+					cached={diffFile.cached}
+					onClose={() => setDiffFile(null)}
+					onOpenFile={onSelectFile}
+				/>
+			)}
 		</div>
 	);
 }
