@@ -177,6 +177,10 @@ export function SourceControlView({
 		setError(null);
 		setSuccess(null);
 		try {
+			// Auto-stage all if nothing is staged (VS Code behavior)
+			if (!status || status.staged.length === 0) {
+				await window.api.gitStageAll();
+			}
 			const result = await window.api.gitCommit(
 				commitMessage,
 			);

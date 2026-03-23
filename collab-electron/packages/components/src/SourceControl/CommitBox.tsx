@@ -31,7 +31,7 @@ export function CommitBox({
 	generating,
 }: CommitBoxProps) {
 	const canCommit =
-		hasStagedChanges && message.trim().length > 0 && !committing;
+		hasAnyChanges && message.trim().length > 0 && !committing;
 
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent) => {

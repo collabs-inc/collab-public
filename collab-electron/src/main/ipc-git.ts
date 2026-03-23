@@ -131,9 +131,14 @@ export function registerGitHandlers(ctx: IpcGitContext): void {
 
     let diff = await gitDiffCached(cwd);
     if (!diff.trim()) {
+      diff = await gitDiffAll(cwd);
+    }
+    if (!diff.trim()) {
       const status = await gitStatus(cwd);
-      if (status.unstaged.length > 0 || status.untracked.length > 0) {
-        diff = await gitDiffAll(cwd);
+      if (status.untracked.length > 0 || status.unstaged.length > 0) {
+        await gitStageAll(cwd);
+        diff = await gitDiffCached(cwd);
+        await gitUnstageAll(cwd);
       }
     }
     if (!diff.trim()) {
