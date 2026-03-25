@@ -221,6 +221,22 @@ contextBridge.exposeInMainWorld("shellApi", {
   ptyKillSession: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke("pty:kill", { sessionId }),
 
+  ptyCaptureOutput: (sessionId: string, lineCount?: number): Promise<string> =>
+    ipcRenderer.invoke("pty:capture-output", sessionId, lineCount),
+
+  ptyCaptureSnapshot: (sessionId: string): Promise<{ output: string; cwd: string; foreground: string; title: string }> =>
+    ipcRenderer.invoke("pty:capture-snapshot", sessionId),
+
+  ptyLlmAvailable: (): Promise<boolean> =>
+    ipcRenderer.invoke("pty:llm-available"),
+
+  ptySummarizeTerminal: (
+    sessionId: string,
+    output: string,
+    context: Record<string, unknown>,
+  ): Promise<{ type: string; status: string; detailed: string[]; reduced: string[]; compact: string } | null> =>
+    ipcRenderer.invoke("pty:summarize-terminal", sessionId, output, context),
+
   onPtyStatusChanged: (
     cb: (payload: { sessionId: string; foreground: string }) => void,
   ) => {

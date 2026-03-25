@@ -43,6 +43,11 @@ import {
 } from "./analytics";
 import { stopImageWorker } from "./image-service";
 import { installCli } from "./cli-installer";
+import {
+  initLlmSummary,
+  isLlmAvailable,
+  summarizeTerminal,
+} from "./llm-summary";
 
 // macOS apps launched from Finder don't inherit the user's shell
 // LANG, so child processes (tmux, shells) default to ASCII.
@@ -579,6 +584,26 @@ ipcMain.handle(
   (_event, sessionId: string) => pty.getForegroundProcess(sessionId),
 );
 
+ipcMain.handle(
+  "pty:capture-output",
+  (_event, sessionId: string, lineCount?: number) =>
+    pty.captureRecentOutput(sessionId, lineCount),
+);
+
+ipcMain.handle(
+  "pty:capture-snapshot",
+  (_event, sessionId: string) =>
+    pty.captureTerminalSnapshot(sessionId),
+);
+
+ipcMain.handle("pty:llm-available", () => isLlmAvailable());
+
+ipcMain.handle(
+  "pty:summarize-terminal",
+  (_event, sessionId: string, output: string, context: Record<string, unknown>) =>
+    summarizeTerminal(sessionId, output, context),
+);
+
 let settingsOpen = false;
 
 function setSettingsOpen(open: boolean): void {
@@ -727,6 +752,7 @@ app.whenReady().then(async () => {
   registerToggleShortcuts(mainWindow!);
 
   initMainAnalytics();
+  initLlmSummary();
   trackEvent("app_launched");
 
   mainWindow!.webContents.on("did-finish-load", () => {

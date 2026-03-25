@@ -163,13 +163,33 @@ export function createTileDOM(tile, callbacks) {
   const contentOverlay = document.createElement("div");
   contentOverlay.className = "tile-content-overlay";
 
+  let summaryOverlay = null;
+  if (tile.type === "term") {
+    summaryOverlay = document.createElement("div");
+    summaryOverlay.className = "tile-summary-overlay";
+
+    const detailed = document.createElement("div");
+    detailed.className = "summary-detailed";
+
+    const reduced = document.createElement("div");
+    reduced.className = "summary-reduced";
+
+    const compact = document.createElement("div");
+    compact.className = "summary-compact";
+
+    summaryOverlay.appendChild(detailed);
+    summaryOverlay.appendChild(reduced);
+    summaryOverlay.appendChild(compact);
+  }
+
   if (urlInput) titleBar.insertBefore(urlInput, btnGroup);
 
   container.appendChild(titleBar);
   container.appendChild(contentArea);
   contentArea.appendChild(contentOverlay);
+  if (summaryOverlay) container.appendChild(summaryOverlay);
 
-  return { container, titleBar, titleText, contentArea, contentOverlay, closeBtn, urlInput, navBack, navForward, navReload };
+  return { container, titleBar, titleText, contentArea, contentOverlay, summaryOverlay, closeBtn, urlInput, navBack, navForward, navReload };
 }
 
 export function getTileLabel(tile) {
@@ -209,6 +229,52 @@ export function updateTileTitle(dom, tile) {
   titleText.appendChild(parentSpan);
   titleText.appendChild(nameSpan);
   titleText.title = tile.filePath || tile.folderPath || "";
+}
+
+/**
+ * Updates the summary overlay content for a terminal tile.
+ * @param {{ summaryOverlay: HTMLElement | null }} dom
+ * @param {{ detailed: string[], reduced: string[], compact: string, status?: string }} summary
+ */
+export function updateTileSummary(dom, summary) {
+  if (!dom.summaryOverlay) return;
+
+  const statusClass = summary.status || "idle";
+  dom.summaryOverlay.dataset.status = statusClass;
+
+  const detailed = dom.summaryOverlay.querySelector(".summary-detailed");
+  const reduced = dom.summaryOverlay.querySelector(".summary-reduced");
+  const compact = dom.summaryOverlay.querySelector(".summary-compact");
+
+  if (detailed) {
+    detailed.textContent = "";
+    for (let i = 0; i < summary.detailed.length; i++) {
+      const line = summary.detailed[i];
+      if (!line) continue;
+      const div = document.createElement("div");
+      div.textContent = line;
+      if (i === 0) div.className = "summary-headline";
+      else if (line.startsWith("→")) div.className = "summary-action";
+      else if (line.startsWith("✗") || line.startsWith("⚠")) div.className = "summary-error-line";
+      else if (line.startsWith("✓") || line.startsWith("●")) div.className = "summary-success-line";
+      detailed.appendChild(div);
+    }
+  }
+  if (reduced) {
+    reduced.textContent = "";
+    for (let i = 0; i < summary.reduced.length; i++) {
+      const line = summary.reduced[i];
+      if (!line) continue;
+      const div = document.createElement("div");
+      div.textContent = line;
+      if (i === 0) div.className = "summary-headline";
+      else if (line.startsWith("→")) div.className = "summary-action";
+      reduced.appendChild(div);
+    }
+  }
+  if (compact) {
+    compact.textContent = summary.compact;
+  }
 }
 
 /**
