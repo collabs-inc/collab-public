@@ -387,6 +387,48 @@ export function discoverSessions(): DiscoveredSession[] {
   return result;
 }
 
+export function captureRecentOutput(
+  sessionId: string,
+  lineCount = 50,
+): string {
+  const name = tmuxSessionName(sessionId);
+  try {
+    const raw = tmuxExec(
+      "capture-pane", "-t", name,
+      "-p", "-S", `-${lineCount}`,
+    );
+    return stripTrailingBlanks(raw);
+  } catch {
+    return "";
+  }
+}
+
+export function captureTerminalSnapshot(
+  sessionId: string,
+): { output: string; cwd: string; foreground: string; title: string } {
+  const name = tmuxSessionName(sessionId);
+  let output = "";
+  let cwd = "";
+  let foreground = "";
+  let title = "";
+  try {
+    output = stripTrailingBlanks(
+      tmuxExec("capture-pane", "-t", name, "-p", "-S", "-100"),
+    );
+  } catch { /* */ }
+  try {
+    const info = tmuxExec(
+      "display-message", "-t", name,
+      "-p", "#{pane_current_path}\t#{pane_current_command}\t#{pane_title}",
+    );
+    const parts = info.split("\t");
+    cwd = parts[0] || "";
+    foreground = parts[1] || "";
+    title = parts[2] || "";
+  } catch { /* */ }
+  return { output, cwd, foreground, title };
+}
+
 export function getForegroundProcess(
   sessionId: string,
 ): string | null {

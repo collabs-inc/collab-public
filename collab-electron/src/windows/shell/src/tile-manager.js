@@ -6,8 +6,10 @@ import {
 } from "./canvas-state.js";
 import {
 	createTileDOM, positionTile, updateTileTitle, getTileLabel,
+	updateTileSummary,
 } from "./tile-renderer.js";
 import { attachDrag, attachResize } from "./tile-interactions.js";
+import { generateSummary } from "./terminal-summary.js";
 
 /**
  * Tile lifecycle manager: creation, deletion, persistence, webview
@@ -682,6 +684,233 @@ export function createTileManager({
 		}
 	}
 
+	// -- Terminal summary overlays --
+
+	const SUMMARY_CAPTURE_DEBOUNCE = 2000;
+	const SUMMARY_REFRESH_INTERVAL = 5000;
+
+	/** @type {Map<string, { foreground?: string, shell?: string, summary?: object }>} */
+	const terminalStates = new Map();
+	/** @type {Map<string, number>} */
+	const captureTimers = new Map();
+	let summaryRefreshInterval = null;
+	let currentZoomTier = null;
+	let currentSummaryScale = null;
+	let llmAvailable = false;
+	let llmChecked = false;
+
+	function zoomTier(zoom) {
+		if (zoom >= 1) return null;
+		if (zoom > 0.25) return "zoom-50";
+		return "zoom-25";
+	}
+
+	function collectOtherTerminals(excludeSessionId) {
+		const others = [];
+		for (const [sessionId, state] of terminalStates) {
+			if (sessionId === excludeSessionId) continue;
+			others.push({ ...state, sessionId });
+		}
+		return others;
+	}
+
+	function ensureSummaryOverlay(dom) {
+		if (dom.summaryOverlay) return;
+		const overlay = document.createElement("div");
+		overlay.className = "tile-summary-overlay";
+		const detailed = document.createElement("div");
+		detailed.className = "summary-detailed";
+		const reduced = document.createElement("div");
+		reduced.className = "summary-reduced";
+		const compact = document.createElement("div");
+		compact.className = "summary-compact";
+		overlay.appendChild(detailed);
+		overlay.appendChild(reduced);
+		overlay.appendChild(compact);
+		if (currentSummaryScale) {
+			overlay.style.setProperty("--summary-scale", currentSummaryScale);
+		}
+		dom.container.appendChild(overlay);
+		dom.summaryOverlay = overlay;
+	}
+
+	function showExistingOrPlaceholder(tile) {
+		const state = terminalStates.get(tile.ptySessionId);
+		const dom = tileDOMs.get(tile.id);
+		if (!dom) return;
+		ensureSummaryOverlay(dom);
+		if (state?.summary) {
+			updateTileSummary(dom, state.summary);
+		} else {
+			const fg = state?.foreground || "zsh";
+			const shellName = (state?.shell || "zsh").split("/").pop();
+			const isIdle = !fg || fg === shellName;
+			updateTileSummary(dom, {
+				status: isIdle ? "idle" : "running",
+				detailed: isIdle ? ["Idle", tile.cwd || ""] : [`Running: ${fg}`],
+				reduced: isIdle ? ["Idle"] : [fg],
+				compact: isIdle ? "Idle" : fg,
+			});
+		}
+	}
+
+	async function checkLlmAvailability() {
+		if (llmChecked) return;
+		llmChecked = true;
+		try {
+			llmAvailable = await window.shellApi.ptyLlmAvailable();
+		} catch { llmAvailable = false; }
+	}
+
+	function refreshSummaryForTile(tile) {
+		if (!tile.ptySessionId) return;
+		const state = terminalStates.get(tile.ptySessionId);
+		if (!state) return;
+
+		const existing = captureTimers.get(tile.ptySessionId);
+		if (existing) clearTimeout(existing);
+
+		captureTimers.set(tile.ptySessionId, setTimeout(async () => {
+			captureTimers.delete(tile.ptySessionId);
+			try {
+				const snap = await window.shellApi.ptyCaptureSnapshot(
+					tile.ptySessionId,
+				);
+				if (snap.foreground) state.foreground = snap.foreground;
+				if (snap.cwd) tile.cwd = snap.cwd;
+
+				const context = {
+					foreground: snap.foreground || state.foreground,
+					shell: state.shell || "zsh",
+					cwd: snap.cwd || tile.cwd || "",
+					title: snap.title || "",
+					otherTerminals: collectOtherTerminals(tile.ptySessionId),
+				};
+
+				const heuristic = generateSummary(snap.output, context);
+				state.summary = heuristic;
+
+				const dom = tileDOMs.get(tile.id);
+				if (dom) {
+					ensureSummaryOverlay(dom);
+					updateTileSummary(dom, heuristic);
+				}
+
+				if (llmAvailable) {
+					const llmCtx = {
+						foreground: context.foreground,
+						shell: context.shell,
+						cwd: context.cwd,
+						title: context.title,
+						otherTerminals: (context.otherTerminals || []).map((t) => ({
+							foreground: t.foreground,
+							cwd: t.cwd,
+							summaryCompact: t.summary?.compact || "",
+						})),
+					};
+					const llmResult = await window.shellApi.ptySummarizeTerminal(
+						tile.ptySessionId, snap.output, llmCtx,
+					);
+					if (llmResult) {
+						state.summary = llmResult;
+						const d = tileDOMs.get(tile.id);
+						if (d) {
+							ensureSummaryOverlay(d);
+							updateTileSummary(d, llmResult);
+						}
+					}
+				}
+			} catch { /* capture may fail for dead sessions */ }
+		}, SUMMARY_CAPTURE_DEBOUNCE));
+	}
+
+	function refreshAllSummaries() {
+		for (const t of tiles) {
+			if (t.type === "term" && t.ptySessionId) {
+				refreshSummaryForTile(t);
+			}
+		}
+	}
+
+	function applyZoomSummaries(zoom, force = false) {
+		const tier = zoomTier(zoom);
+		if (!force && tier === currentZoomTier) return;
+
+		if (tier && !llmChecked) checkLlmAvailability();
+
+		const prevTier = currentZoomTier;
+		currentZoomTier = tier;
+
+		currentSummaryScale = tier ? (1 / Math.pow(zoom, 0.65)).toFixed(3) : null;
+
+		for (const t of tiles) {
+			if (t.type !== "term") continue;
+			const dom = tileDOMs.get(t.id);
+			if (!dom) continue;
+			dom.container.classList.remove("zoom-75", "zoom-50", "zoom-25");
+			if (tier) {
+				dom.container.classList.add(tier);
+				if (t.ptySessionId) showExistingOrPlaceholder(t);
+				if (dom.summaryOverlay) {
+					dom.summaryOverlay.style.setProperty("--summary-scale", currentSummaryScale);
+				}
+			}
+		}
+
+		if (tier && !prevTier) {
+			refreshAllSummaries();
+			summaryRefreshInterval = setInterval(
+				refreshAllSummaries, SUMMARY_REFRESH_INTERVAL,
+			);
+		} else if (!tier && prevTier) {
+			if (summaryRefreshInterval) {
+				clearInterval(summaryRefreshInterval);
+				summaryRefreshInterval = null;
+			}
+		} else if (tier && prevTier) {
+			refreshAllSummaries();
+		}
+	}
+
+	function updateTerminalStatus(sessionId, foreground) {
+		let state = terminalStates.get(sessionId);
+		if (!state) {
+			state = {};
+			terminalStates.set(sessionId, state);
+		}
+		state.foreground = foreground;
+
+		if (currentZoomTier) {
+			const tile = tiles.find(
+				(t) => t.type === "term" && t.ptySessionId === sessionId,
+			);
+			if (tile) refreshSummaryForTile(tile);
+		}
+	}
+
+	function registerTerminalSession(tile) {
+		if (!tile.ptySessionId) return;
+		if (!terminalStates.has(tile.ptySessionId)) {
+			terminalStates.set(tile.ptySessionId, { shell: "zsh" });
+		}
+		if (currentZoomTier) {
+			const dom = tileDOMs.get(tile.id);
+			if (dom) {
+				dom.container.classList.add(currentZoomTier);
+			}
+			refreshSummaryForTile(tile);
+		}
+	}
+
+	function unregisterTerminalSession(sessionId) {
+		terminalStates.delete(sessionId);
+		const timer = captureTimers.get(sessionId);
+		if (timer) {
+			clearTimeout(timer);
+			captureTimers.delete(sessionId);
+		}
+	}
+
 	return {
 		createCanvasTile,
 		closeCanvasTile,
@@ -706,5 +935,9 @@ export function createTileManager({
 		broadcastToTileWebviews,
 		saveCanvasDebounced,
 		saveCanvasImmediate,
+		applyZoomSummaries,
+		updateTerminalStatus,
+		registerTerminalSession,
+		unregisterTerminalSession,
 	};
 }

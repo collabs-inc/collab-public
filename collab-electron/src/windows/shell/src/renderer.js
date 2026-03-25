@@ -248,11 +248,13 @@ async function init() {
 				foreground: null,
 				tileId: tile.id,
 			});
+			tileManager.registerTerminalSession(tile);
 		},
 		onTerminalTileClosed(sessionId) {
 			terminalListWebview.send(
 				"terminal-list:remove", sessionId,
 			);
+			tileManager.unregisterTerminalSession(sessionId);
 		},
 		onTileFocused(tile) {
 			terminalListWebview.send(
@@ -287,6 +289,7 @@ async function init() {
 		tileManager.repositionAllTiles();
 		edgeIndicators.update();
 		tileManager.saveCanvasDebounced();
+		tileManager.applyZoomSummaries(viewportState.zoom);
 	});
 
 	edgeIndicators.update();
@@ -901,6 +904,9 @@ async function init() {
 
 	window.shellApi.onPtyStatusChanged((payload) => {
 		terminalListWebview.send("pty-status-changed", payload);
+		tileManager.updateTerminalStatus(
+			payload.sessionId, payload.foreground,
+		);
 	});
 
 	// -- Terminal list init + click-to-focus --
@@ -1201,9 +1207,12 @@ async function init() {
 		const tile = getTile(id);
 		if (tile?.type === "term" && tile.ptySessionId) {
 			activeSessionIds.push(tile.ptySessionId);
+			tileManager.registerTerminalSession(tile);
 		}
 	}
 	window.shellApi.ptyCleanDetached?.(activeSessionIds);
+
+	tileManager.applyZoomSummaries(viewportState.zoom, true);
 
 	// -- Initialize workspaces --
 

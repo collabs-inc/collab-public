@@ -1,11 +1,8 @@
 /**
- * Tests for pure zoom/viewport logic that will live in canvas-viewport.js.
- * These functions are currently inlined in renderer.js.
- *
- * After modularization, update imports to use ./canvas-viewport.js.
+ * Tests for zoom/viewport logic in canvas-viewport.js.
  */
 import { describe, test, expect } from "bun:test";
-import { shouldZoom } from "./canvas-viewport.js";
+import { shouldZoom, ZOOM_LEVELS } from "./canvas-viewport.js";
 
 // -- shouldZoom modifier key routing --
 
@@ -31,152 +28,30 @@ describe("shouldZoom", () => {
   });
 });
 
-// -- Extracted constants and logic (from renderer.js lines 53-230) --
+// -- Snap zoom levels --
 
-const ZOOM_MIN = 0.33;
-const ZOOM_MAX = 1;
-const ZOOM_RUBBER_BAND_K = 400;
-
-interface ViewportState {
-  panX: number;
-  panY: number;
-  zoom: number;
-}
-
-/**
- * Core zoom math extracted from applyZoom in renderer.js.
- * Applies a single zoom step to the viewport state, returning the new state.
- * Does not include rubber-band snap-back (that's animation logic).
- */
-function computeZoomStep(
-  state: ViewportState,
-  deltaY: number,
-  focalX: number,
-  focalY: number,
-): ViewportState {
-  const prevScale = state.zoom;
-  let factor = Math.exp((-deltaY * 0.6) / 100);
-
-  if (state.zoom >= ZOOM_MAX && factor > 1) {
-    const overshoot = state.zoom / ZOOM_MAX - 1;
-    const damping = 1 / (1 + overshoot * ZOOM_RUBBER_BAND_K);
-    factor = 1 + (factor - 1) * damping;
-  } else if (state.zoom <= ZOOM_MIN && factor < 1) {
-    const overshoot = ZOOM_MIN / state.zoom - 1;
-    const damping = 1 / (1 + overshoot * ZOOM_RUBBER_BAND_K);
-    factor = 1 - (1 - factor) * damping;
-  }
-
-  const newZoom = state.zoom * factor;
-  const ratio = newZoom / prevScale - 1;
-  const newPanX = state.panX - (focalX - state.panX) * ratio;
-  const newPanY = state.panY - (focalY - state.panY) * ratio;
-
-  return { panX: newPanX, panY: newPanY, zoom: newZoom };
-}
-
-// -- Zoom math --
-
-describe("computeZoomStep", () => {
-  test("negative deltaY zooms in (increases zoom)", () => {
-    const state: ViewportState = { panX: 0, panY: 0, zoom: 0.5 };
-    const result = computeZoomStep(state, -100, 500, 400);
-    expect(result.zoom).toBeGreaterThan(0.5);
+describe("ZOOM_LEVELS", () => {
+  test("has exactly 4 levels", () => {
+    expect(ZOOM_LEVELS).toHaveLength(4);
   });
 
-  test("positive deltaY zooms out (decreases zoom)", () => {
-    const state: ViewportState = { panX: 0, panY: 0, zoom: 0.5 };
-    const result = computeZoomStep(state, 100, 500, 400);
-    expect(result.zoom).toBeLessThan(0.5);
-  });
-
-  test("zero deltaY does not change zoom", () => {
-    const state: ViewportState = { panX: 0, panY: 0, zoom: 0.5 };
-    const result = computeZoomStep(state, 0, 500, 400);
-    expect(result.zoom).toBeCloseTo(0.5, 10);
-  });
-
-  test("zoom is focal-point centered (pan adjusts)", () => {
-    const state: ViewportState = { panX: 100, panY: 100, zoom: 0.5 };
-    const result = computeZoomStep(state, -50, 500, 400);
-    // After zooming in, the focal point should remain stationary
-    // in screen coordinates. The pan shifts to compensate.
-    // Verify pan changed (it should shift toward the focal point)
-    expect(result.panX).not.toBe(100);
-    expect(result.panY).not.toBe(100);
-  });
-
-  test("zooming at viewport origin (0,0) does not shift pan", () => {
-    const state: ViewportState = { panX: 0, panY: 0, zoom: 0.5 };
-    const result = computeZoomStep(state, -50, 0, 0);
-    // With focal at (0,0) which equals panX/panY, ratio * 0 = 0
-    expect(result.panX).toBeCloseTo(0, 10);
-    expect(result.panY).toBeCloseTo(0, 10);
-  });
-
-  test("rubber-band damping limits zoom beyond ZOOM_MAX", () => {
-    // Start slightly past max so damping is active (overshoot > 0)
-    const state: ViewportState = { panX: 0, panY: 0, zoom: 1.05 };
-    const result = computeZoomStep(state, -100, 500, 400);
-    // Zooms past max but damping reduces the step significantly
-    expect(result.zoom).toBeGreaterThan(1.05);
-    // Damping means it grows much less than undamped would
-    const undamped = computeZoomStep(
-      { panX: 0, panY: 0, zoom: 0.5 }, -100, 500, 400,
-    );
-    const undampedRatio = undamped.zoom / 0.5;
-    const dampedRatio = result.zoom / 1.05;
-    expect(dampedRatio).toBeLessThan(undampedRatio);
-  });
-
-  test("rubber-band damping limits zoom below ZOOM_MIN", () => {
-    // Start slightly below min so damping is active
-    const state: ViewportState = { panX: 0, panY: 0, zoom: 0.30 };
-    const result = computeZoomStep(state, 100, 500, 400);
-    expect(result.zoom).toBeLessThan(0.30);
-    // Damping means it shrinks less than undamped would
-    const undamped = computeZoomStep(
-      { panX: 0, panY: 0, zoom: 0.5 }, 100, 500, 400,
-    );
-    const undampedRatio = undamped.zoom / 0.5;
-    const dampedRatio = result.zoom / 0.30;
-    expect(dampedRatio).toBeGreaterThan(undampedRatio);
-  });
-
-  test("multiple small steps produce consistent zoom direction", () => {
-    let state: ViewportState = { panX: 100, panY: 100, zoom: 0.5 };
-    for (let i = 0; i < 10; i++) {
-      const prev = state.zoom;
-      state = computeZoomStep(state, -10, 500, 400);
-      expect(state.zoom).toBeGreaterThan(prev);
+  test("levels are sorted ascending", () => {
+    for (let i = 1; i < ZOOM_LEVELS.length; i++) {
+      expect(ZOOM_LEVELS[i]).toBeGreaterThan(ZOOM_LEVELS[i - 1]);
     }
   });
 
-  test("zoom in then zoom out returns approximately to original", () => {
-    const original: ViewportState = { panX: 200, panY: 150, zoom: 0.7 };
-    // Zoom in
-    let state = computeZoomStep(original, -50, 500, 400);
-    // Zoom out by same delta
-    state = computeZoomStep(state, 50, 500, 400);
-    // Should be close to original (not exact due to floating point)
-    expect(state.zoom).toBeCloseTo(original.zoom, 2);
-    expect(state.panX).toBeCloseTo(original.panX, 0);
-    expect(state.panY).toBeCloseTo(original.panY, 0);
-  });
-});
-
-// -- Viewport state constraints --
-
-describe("viewport zoom constants", () => {
-  test("ZOOM_MIN is less than ZOOM_MAX", () => {
-    expect(ZOOM_MIN).toBeLessThan(ZOOM_MAX);
+  test("first level is 33%", () => {
+    expect(ZOOM_LEVELS[0]).toBeCloseTo(0.33, 2);
   });
 
-  test("ZOOM_MIN is positive", () => {
-    expect(ZOOM_MIN).toBeGreaterThan(0);
+  test("last level is 100%", () => {
+    expect(ZOOM_LEVELS[ZOOM_LEVELS.length - 1]).toBe(1);
   });
 
-  test("ZOOM_MAX is 1 (100%)", () => {
-    expect(ZOOM_MAX).toBe(1);
+  test("all levels are positive", () => {
+    for (const level of ZOOM_LEVELS) {
+      expect(level).toBeGreaterThan(0);
+    }
   });
 });
