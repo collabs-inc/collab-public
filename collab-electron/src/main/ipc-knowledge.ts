@@ -1,4 +1,4 @@
-import { ipcMain, type BrowserWindow } from "electron";
+import { ipcMain, shell, type BrowserWindow } from "electron";
 import { extname } from "node:path";
 import * as wikilinkIndex from "./wikilink-index";
 import { buildWorkspaceGraph } from "./workspace-graph";
@@ -104,6 +104,14 @@ export function registerKnowledgeHandlers(
         "open-terminal",
         path,
       );
+    },
+  );
+
+  ipcMain.on(
+    "nav:reveal-in-finder",
+    (_event, path: string) => {
+      ctx.trackEvent("file_revealed_in_finder");
+      shell.showItemInFolder(path);
     },
   );
 

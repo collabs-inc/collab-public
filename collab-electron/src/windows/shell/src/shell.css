@@ -7,9 +7,9 @@
 	--canvas-bg: rgb(230, 230, 230);
 	--canvas-bg-hi: rgb(244, 244, 244);
 	--canvas-bg-rgb: 230, 230, 230;
-	--canvas-opacity: 0;
 	--tile-focus-border-color: rgba(0, 0, 0, 0.5);
 	--tile-focus-border-width: 1px;
+	--canvas-opacity: 0.5;
 	--fg: rgb(32, 32, 32);
 	--border: rgb(206, 206, 206);
 	--tile-border: rgb(180, 180, 180);

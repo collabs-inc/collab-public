@@ -1,4 +1,9 @@
 {
-  "contributors": ["yiliushenburke"],
+  "contributors": [
+    "yiliushenburke",
+    "AhnSeongHyun",
+    "EduardoFazolo",
+    "BearHuddleston"
+  ],
   "message": "Thanks for the pull request! It looks like {{usersWithoutCLA}} haven't signed our [Contributor License Agreement](CLA.md) yet.\n\nPlease read the CLA, then sign by posting the following comment on this PR:\n\n> I have read the Contributor License Agreement (CLA) and hereby sign the CLA.\n\nAfter signing, comment `@cla-bot check` to re-verify."
 }

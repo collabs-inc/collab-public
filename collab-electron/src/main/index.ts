@@ -177,6 +177,8 @@ const TOGGLE_SHORTCUTS: Record<string, ShortcutEntry> = {
   Comma: { modifier: cmdOrCtrl, action: "toggle-settings" },
   KeyO: { modifier: shiftCmdOrCtrl, action: "add-workspace" },
   KeyK: { modifier: cmdOrCtrl, action: "focus-search" },
+  KeyN: { modifier: cmdOrCtrl, action: "new-tile" },
+  KeyW: { modifier: cmdOrCtrl, action: "close-tile" },
 };
 
 const TOGGLE_SHORTCUT_KEYS: Record<string, ShortcutEntry> = {
@@ -185,6 +187,8 @@ const TOGGLE_SHORTCUT_KEYS: Record<string, ShortcutEntry> = {
   ",": TOGGLE_SHORTCUTS.Comma!,
   o: TOGGLE_SHORTCUTS.KeyO!,
   k: TOGGLE_SHORTCUTS.KeyK!,
+  n: TOGGLE_SHORTCUTS.KeyN!,
+  w: TOGGLE_SHORTCUTS.KeyW!,
 };
 
 function normalizeShortcutKey(key: string | undefined): string | null {
@@ -311,6 +315,19 @@ function buildAppMenu(): void {
     {
       label: "File",
       submenu: [
+        {
+          label: "New Tile",
+          accelerator: "CommandOrControl+N",
+          registerAccelerator: false,
+          click: () => sendShortcut("new-tile"),
+        },
+        {
+          label: "Close Tile",
+          accelerator: "CommandOrControl+W",
+          registerAccelerator: false,
+          click: () => sendShortcut("close-tile"),
+        },
+        { type: "separator" },
         {
           label: "Open Workspace\u2026",
           accelerator: "CommandOrControl+Shift+O",

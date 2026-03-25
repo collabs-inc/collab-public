@@ -109,7 +109,7 @@ function Slider({
           left: `calc(${pct}% - 7px)`,
           backgroundColor: "var(--background)",
           borderColor: "var(--foreground)",
-          opacity: 0.8,
+          opacity: 1,
         }}
       />
     </div>
@@ -291,20 +291,33 @@ const IS_MAC =
 
 const MOD = IS_MAC ? "\u2318" : "Ctrl+";
 const SHIFT = IS_MAC ? "\u21E7" : "Shift+";
+const CTRL = IS_MAC ? "\u2303" : "Ctrl+";
 
 const SHORTCUTS: { label: string; keys: string }[] = [
-  { label: "Settings", keys: `${MOD},` },
-  { label: "Find", keys: `${MOD}K` },
-  { label: "Toggle Navigator", keys: `${MOD}\\` },
-  { label: "Toggle Terminal List", keys: `${MOD}\`` },
-  { label: "Open Workspace", keys: `${SHIFT}${MOD}O` },
-  { label: "Zoom In", keys: `${MOD}=` },
-  { label: "Zoom Out", keys: `${MOD}-` },
-  { label: "Actual Size", keys: `${MOD}0` },
+  { label: "Settings", keys: `${MOD} ,` },
+  { label: "Find", keys: `${MOD} K` },
+  { label: "Toggle Navigator", keys: `${MOD} \\` },
+  { label: "Toggle Terminal List", keys: `${MOD} \`` },
+  { label: "Open Workspace", keys: `${SHIFT} ${MOD} O` },
+  { label: "Zoom In", keys: `${MOD} =` },
+  { label: "Zoom Out", keys: `${MOD} -` },
+  { label: "Actual Size", keys: `${MOD} 0` },
   {
     label: "Toggle Full Screen",
-    keys: IS_MAC ? "\u2303\u2318F" : "F11",
+    keys: IS_MAC ? "\u2303 \u2318 F" : "F11",
   },
+];
+
+const MOUSE_INPUTS: { label: string; keys: string }[] = [
+  { label: "Pan Canvas", keys: "Two-Finger Swipe" },
+  { label: "Pan Canvas", keys: "Middle Click + Drag" },
+  { label: "Pan Canvas", keys: "Space + Drag" },
+  { label: "Scroll Canvas Vertically", keys: "Scroll" },
+  { label: "Scroll Canvas Horizontally", keys: `${SHIFT} Scroll` },
+  { label: "Zoom", keys: `${CTRL} Scroll` },
+  ...(IS_MAC
+    ? [{ label: "Zoom", keys: `${MOD} Scroll` }]
+    : []),
 ];
 
 function Kbd({ children }: { children: string }) {
@@ -322,36 +335,43 @@ function Kbd({ children }: { children: string }) {
   );
 }
 
-function ShortcutsPane() {
+function ShortcutList({ items }: { items: { label: string; keys: string }[] }) {
   return (
-    <div className="space-y-6 p-6">
-      <div className="space-y-1">
-        <h2 className="text-base font-semibold">Keyboard Shortcuts</h2>
-        <p className="text-sm text-muted-foreground">
-          All available keyboard shortcuts.
-        </p>
-      </div>
-
-      <div className="space-y-0">
-        {SHORTCUTS.map(({ label, keys }) => (
-          <div
-            key={label}
-            className="flex items-center justify-between py-2"
-            style={{
-              borderBottom:
-                "1px solid color-mix(in srgb, var(--foreground) 6%, transparent)",
-            }}
-          >
-            <span className="text-sm">{label}</span>
-            <Kbd>{keys}</Kbd>
-          </div>
-        ))}
-      </div>
+    <div className="space-y-0">
+      {items.map(({ label, keys }, i) => (
+        <div
+          key={`${label}-${i}`}
+          className="flex items-center justify-between py-2"
+          style={{
+            borderBottom:
+              "1px solid color-mix(in srgb, var(--foreground) 6%, transparent)",
+          }}
+        >
+          <span className="text-sm">{label}</span>
+          <Kbd>{keys}</Kbd>
+        </div>
+      ))}
     </div>
   );
 }
 
-type Pane = "appearance" | "shortcuts";
+function ControlsPane() {
+  return (
+    <div className="space-y-6 p-6">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold">Keyboard Shortcuts</h2>
+      </div>
+      <ShortcutList items={SHORTCUTS} />
+
+      <div className="space-y-1 pt-2">
+        <h2 className="text-base font-semibold">Mouse Controls</h2>
+      </div>
+      <ShortcutList items={MOUSE_INPUTS} />
+    </div>
+  );
+}
+
+type Pane = "appearance" | "controls";
 
 const NAV_ITEMS: {
   id: Pane;
@@ -359,7 +379,7 @@ const NAV_ITEMS: {
   icon: typeof Palette;
 }[] = [
     { id: "appearance", label: "Appearance", icon: Palette },
-    { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
+    { id: "controls", label: "Controls", icon: Keyboard },
   ];
 
 function CloseButton({ onClick }: { onClick: () => void }) {
@@ -481,7 +501,7 @@ export default function App() {
       {/* Content */}
       <div className="flex-1 overflow-auto">
         {activePane === "appearance" && <AppearancePane />}
-        {activePane === "shortcuts" && <ShortcutsPane />}
+        {activePane === "controls" && <ControlsPane />}
       </div>
     </div>
   );

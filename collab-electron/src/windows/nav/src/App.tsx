@@ -557,6 +557,10 @@ export default function App() {
 						label: 'Copy Filepath',
 					},
 					{
+						id: 'reveal-in-finder',
+						label: 'Reveal in Finder',
+					},
+					{
 						id: 'terminal',
 						label: 'Open in Terminal',
 					},
@@ -569,6 +573,10 @@ export default function App() {
 					{
 						id: 'copy-path',
 						label: 'Copy Filepath',
+					},
+					{
+						id: 'reveal-in-finder',
+						label: 'Reveal in Finder',
 					},
 					{
 						id: 'terminal',
@@ -644,6 +652,10 @@ export default function App() {
 						navigator.clipboard.writeText(
 							item.path,
 						);
+					break;
+				case 'reveal-in-finder':
+					if (item)
+						window.api.revealInFinder(item.path);
 					break;
 				case 'terminal':
 					if (item)

@@ -129,7 +129,10 @@ export function createViewport(canvasEl, gridCanvas) {
 		clearTimeout(zoomSnapTimer);
 
 		const prevScale = state.zoom;
-		let factor = Math.exp((-deltaY * 0.6) / 100);
+		const MAX_ZOOM_DELTA = 25;
+		const clamped = Math.sign(deltaY)
+			* Math.min(Math.abs(deltaY), MAX_ZOOM_DELTA);
+		let factor = Math.exp((-clamped * 0.6) / 100);
 
 		if (state.zoom >= ZOOM_MAX && factor > 1) {
 			const overshoot = state.zoom / ZOOM_MAX - 1;

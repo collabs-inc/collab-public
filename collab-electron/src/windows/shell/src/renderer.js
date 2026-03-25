@@ -26,14 +26,13 @@ canvasEl.tabIndex = -1;
 initDarkMode(() => viewport.updateCanvas());
 
 let broadcastCanvasOpacity = () => {};
-let lastCanvasOpacity = null;
+const DEFAULT_CANVAS_OPACITY = 50;
+let lastCanvasOpacity = DEFAULT_CANVAS_OPACITY;
 
 window.shellApi.getPref("canvasOpacity").then((v) => {
-	if (v != null) {
-		lastCanvasOpacity = v;
-		applyCanvasOpacity(v);
-		broadcastCanvasOpacity();
-	}
+	lastCanvasOpacity = v != null ? v : DEFAULT_CANVAS_OPACITY;
+	applyCanvasOpacity(lastCanvasOpacity);
+	broadcastCanvasOpacity();
 });
 window.shellApi.getPref("tileBorderColor").then((v) => {
 	if (v != null) applyTileBorderColor(v);
@@ -565,12 +564,11 @@ async function init() {
 				for (const id of ids) selectTile(id);
 			}
 			tileManager.syncSelectionVisuals();
-			if (ids.size === 0) {
-				tileManager.blurCanvasTileGuest();
-				tileManager.clearTileFocusRing();
-				tileManager.setFocusedTileId(null);
-				noteSurfaceFocus("canvas");
-			}
+			tileManager.blurCanvasTileGuest();
+			tileManager.clearTileFocusRing();
+			tileManager.setFocusedTileId(null);
+			canvasEl.focus();
+			noteSurfaceFocus("canvas");
 		},
 		isShiftHeld: () => shiftHeld,
 		isSpaceHeld: () => spaceHeld,
@@ -742,6 +740,30 @@ async function init() {
 			wsAddOption.click();
 		} else if (action === "toggle-terminal-list") {
 			terminalPanel.toggle();
+		} else if (action === "new-tile") {
+			const rect = canvasEl.getBoundingClientRect();
+			const size = defaultSize("term");
+			const cx =
+				(rect.width / 2 - viewportState.panX) /
+				viewportState.zoom - size.width / 2;
+			const cy =
+				(rect.height / 2 - viewportState.panY) /
+				viewportState.zoom - size.height / 2;
+			const ws = workspaceManager.getActiveWorkspace();
+			const cwd = ws ? ws.path : undefined;
+			const tile = tileManager.createCanvasTile(
+				"term", cx, cy, { cwd },
+			);
+			tileManager.spawnTerminalWebview(tile, true);
+			tileManager.saveCanvasImmediate();
+		} else if (action === "close-tile") {
+			const focusedId = tileManager.getFocusedTileId();
+			if (focusedId) {
+				tileManager.closeCanvasTile(focusedId);
+				tileManager.setFocusedTileId(null);
+				canvasEl.focus();
+				noteSurfaceFocus("canvas");
+			}
 		}
 	}
 
@@ -751,6 +773,17 @@ async function init() {
 		if (!isFocusSearchShortcut(event)) return;
 		event.preventDefault();
 		handleShortcut("focus-search");
+	});
+
+	window.addEventListener("keydown", (event) => {
+		if (!event.metaKey || event.shiftKey || event.altKey) return;
+		if (event.key === "n") {
+			event.preventDefault();
+			handleShortcut("new-tile");
+		} else if (event.key === "w") {
+			event.preventDefault();
+			handleShortcut("close-tile");
+		}
 	});
 
 	// -- Browser tile Cmd+L focus URL --

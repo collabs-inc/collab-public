@@ -33,11 +33,19 @@ interface CanvasState {
   };
 }
 
+function sanitizeCoord(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
 export async function loadState(): Promise<CanvasState | null> {
   try {
     const raw = await readFile(STATE_FILE, "utf-8");
     const state = JSON.parse(raw) as CanvasState;
     if (state.version !== 1) return null;
+    for (const tile of state.tiles) {
+      tile.x = sanitizeCoord(tile.x);
+      tile.y = sanitizeCoord(tile.y);
+    }
     return state;
   } catch {
     return null;

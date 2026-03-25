@@ -107,8 +107,14 @@ export function createCanvasRpc({
 				case "tileMove": {
 					const tile = requireTile(requestId, params.tileId);
 					if (!tile) return;
-					tile.x = params.position.x;
-					tile.y = params.position.y;
+					const mx = params.position?.x;
+					const my = params.position?.y;
+					if (!Number.isFinite(mx) || !Number.isFinite(my)) {
+						respondError(requestId, 4, "Invalid position");
+						return;
+					}
+					tile.x = mx;
+					tile.y = my;
 					snapToGrid(tile);
 					tileManager.repositionAllTiles();
 					tileManager.saveCanvasImmediate();
@@ -118,8 +124,14 @@ export function createCanvasRpc({
 				case "tileResize": {
 					const tile = requireTile(requestId, params.tileId);
 					if (!tile) return;
-					tile.width = params.size.width;
-					tile.height = params.size.height;
+					const rw = params.size?.width;
+					const rh = params.size?.height;
+					if (!Number.isFinite(rw) || !Number.isFinite(rh)) {
+						respondError(requestId, 4, "Invalid size");
+						return;
+					}
+					tile.width = rw;
+					tile.height = rh;
 					snapToGrid(tile);
 					tileManager.repositionAllTiles();
 					tileManager.saveCanvasImmediate();

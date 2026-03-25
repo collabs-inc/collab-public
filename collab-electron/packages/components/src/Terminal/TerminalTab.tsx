@@ -66,6 +66,19 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData }: TerminalT
 			requestAnimationFrame(() => fit.fit());
 		});
 
+		// Auto-focus xterm when the webview already has focus (e.g.
+		// tile created via Cmd+N or double-click where focusCanvasTile
+		// ran before xterm mounted).
+		if (document.hasFocus()) {
+			term.focus();
+		}
+
+		// Keep xterm focused whenever the webview window gains focus,
+		// so typing works immediately after clicking a tile title bar
+		// or programmatic webview.focus() calls.
+		const onWindowFocus = () => term.focus();
+		window.addEventListener("focus", onWindowFocus);
+
 		if (!restored) {
 			term.write(
 				`\x1b[38;2;100;100;100mStarting...\x1b[0m`,
@@ -174,6 +187,7 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData }: TerminalT
 				flushData();
 			}
 			cancelAnimationFrame(rafId);
+			window.removeEventListener("focus", onWindowFocus);
 			mediaQuery.removeEventListener("change", onThemeChange);
 			resizeObserver.disconnect();
 			window.api.offPtyData(handleData);

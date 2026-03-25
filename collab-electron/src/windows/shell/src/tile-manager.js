@@ -8,6 +8,7 @@ import {
 	createTileDOM, positionTile, updateTileTitle, getTileLabel,
 } from "./tile-renderer.js";
 import { attachDrag, attachResize } from "./tile-interactions.js";
+import { findAutoPlacement } from "./canvas-rpc.js";
 
 /**
  * Tile lifecycle manager: creation, deletion, persistence, webview
@@ -34,6 +35,12 @@ export function createTileManager({
 		get zoom() { return viewportState.zoom; },
 	};
 
+	// -- Coordinate validation --
+
+	function safeCoord(v) {
+		return Number.isFinite(v) ? v : 0;
+	}
+
 	// -- Canvas persistence --
 
 	function getCanvasStateForSave() {
@@ -42,8 +49,8 @@ export function createTileManager({
 			tiles: tiles.map((t) => ({
 				id: t.id,
 				type: t.type,
-				x: t.x,
-				y: t.y,
+				x: safeCoord(t.x),
+				y: safeCoord(t.y),
 				width: t.width,
 				height: t.height,
 				filePath: t.filePath,
@@ -585,9 +592,20 @@ export function createTileManager({
 
 	function restoreCanvasState(savedTiles) {
 		for (const saved of savedTiles) {
+			let cx = saved.x;
+			let cy = saved.y;
+			if (!Number.isFinite(cx) || !Number.isFinite(cy)) {
+				const size = defaultSize(saved.type);
+				const pos = findAutoPlacement(
+					tiles, size.width, size.height,
+				);
+				cx = pos.x;
+				cy = pos.y;
+			}
+
 			if (saved.type === "term") {
 				const tile = createCanvasTile(
-					"term", saved.x, saved.y, {
+					"term", cx, cy, {
 						id: saved.id,
 						width: saved.width,
 						height: saved.height,
@@ -598,7 +616,7 @@ export function createTileManager({
 				spawnTerminalWebview(tile);
 			} else if (saved.type === "graph" && saved.folderPath) {
 				const tile = createCanvasTile(
-					"graph", saved.x, saved.y, {
+					"graph", cx, cy, {
 						id: saved.id,
 						width: saved.width,
 						height: saved.height,
@@ -610,7 +628,7 @@ export function createTileManager({
 				spawnGraphWebview(tile);
 			} else if (saved.type === "browser") {
 				const tile = createCanvasTile(
-					"browser", saved.x, saved.y, {
+					"browser", cx, cy, {
 						id: saved.id,
 						width: saved.width,
 						height: saved.height,
@@ -621,7 +639,7 @@ export function createTileManager({
 				spawnBrowserWebview(tile);
 			} else if (saved.filePath) {
 				createFileTile(
-					saved.type, saved.x, saved.y, saved.filePath,
+					saved.type, cx, cy, saved.filePath,
 				);
 			}
 		}
