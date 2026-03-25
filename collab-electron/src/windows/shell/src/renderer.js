@@ -1182,10 +1182,7 @@ async function init() {
 				const p = window.shellApi.getPathForFile
 					? window.shellApi.getPathForFile(f)
 					: f.path;
-				if (p) {
-					console.log(`[drop] External file: "${p}"`);
-					externalPaths.push(p);
-				}
+				if (p) externalPaths.push(p);
 			}
 		}
 
