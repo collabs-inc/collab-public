@@ -1,5 +1,6 @@
 [test]
 root = "."
+preload = ["./test/setup-dom.ts"]
 
 [resolve.alias]
 # Mirror the aliases from electron.vite.config.ts so bun test can resolve them

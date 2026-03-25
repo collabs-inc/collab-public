@@ -52,7 +52,10 @@ function Slider({
       const track = trackRef.current;
       if (!track) return;
       const rect = track.getBoundingClientRect();
-      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const ratio = Math.max(
+        0,
+        Math.min(1, (clientX - rect.left) / rect.width),
+      );
       onChange(Math.round(min + ratio * (max - min)));
     },
     [min, max, onChange],
@@ -155,9 +158,7 @@ function ThemeToggle({
             <Icon
               className="h-4 w-4 transition-colors duration-150"
               style={{
-                color: active
-                  ? "var(--foreground)"
-                  : "var(--muted-foreground)",
+                color: active ? "var(--foreground)" : "var(--muted-foreground)",
               }}
               weight={active ? "fill" : "regular"}
             />
@@ -171,19 +172,35 @@ function ThemeToggle({
 function AppearancePane() {
   const [theme, setTheme] = useState<ThemeMode>("system");
   const [canvasOpacity, setCanvasOpacity] = useState(0);
+  const [tileBorderColor, setTileBorderColor] = useState("#ffffff");
+  const [tileBorderWidth, setTileBorderWidth] = useState(1);
 
   useEffect(() => {
-    api.getPref("theme")
+    api
+      .getPref("theme")
       .then((v) => {
         if (v === "light" || v === "dark") setTheme(v);
         else setTheme("system");
       })
-      .catch(() => { });
-    api.getPref("canvasOpacity")
+      .catch(() => {});
+    api
+      .getPref("canvasOpacity")
       .then((v) => {
         if (typeof v === "number") setCanvasOpacity(v);
       })
-      .catch(() => { });
+      .catch(() => {});
+    api
+      .getPref("tileBorderColor")
+      .then((v) => {
+        if (typeof v === "string") setTileBorderColor(v);
+      })
+      .catch(() => {});
+    api
+      .getPref("tileBorderWidth")
+      .then((v) => {
+        if (typeof v === "number") setTileBorderWidth(v);
+      })
+      .catch(() => {});
   }, []);
 
   async function handleThemeChange(mode: ThemeMode) {
@@ -194,6 +211,16 @@ function AppearancePane() {
   async function handleOpacityChange(value: number) {
     setCanvasOpacity(value);
     await api.setPref("canvasOpacity", value);
+  }
+
+  async function handleTileBorderColorChange(color: string) {
+    setTileBorderColor(color);
+    await api.setPref("tileBorderColor", color);
+  }
+
+  async function handleTileBorderWidthChange(value: number) {
+    setTileBorderWidth(value);
+    await api.setPref("tileBorderWidth", value);
   }
 
   return (
@@ -209,7 +236,9 @@ function AppearancePane() {
         <p className="text-sm font-medium">Theme</p>
         <ThemeToggle
           value={theme}
-          onChange={(m) => { void handleThemeChange(m); }}
+          onChange={(m) => {
+            void handleThemeChange(m);
+          }}
         />
       </div>
 
@@ -222,16 +251,55 @@ function AppearancePane() {
         </div>
         <Slider
           value={canvasOpacity}
-          onChange={(v) => { void handleOpacityChange(v); }}
+          onChange={(v) => {
+            void handleOpacityChange(v);
+          }}
         />
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold">Tile</h3>
+        <div className="space-y-3 border-l-2 border-border pl-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">Border color</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {tileBorderColor}
+              </span>
+              <input
+                type="color"
+                value={tileBorderColor}
+                onChange={(e) => {
+                  void handleTileBorderColorChange(e.target.value);
+                }}
+                className="h-6 w-6 cursor-pointer rounded border border-border bg-transparent p-0"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Border width</p>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {tileBorderWidth}px
+              </span>
+            </div>
+            <Slider
+              min={0}
+              max={4}
+              value={tileBorderWidth}
+              onChange={(v) => {
+                void handleTileBorderWidthChange(v);
+              }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
 const IS_MAC =
-  typeof navigator !== "undefined" &&
-  /mac/i.test(navigator.userAgent);
+  typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent);
 
 const MOD = IS_MAC ? "\u2318" : "Ctrl+";
 const SHIFT = IS_MAC ? "\u21E7" : "Shift+";
@@ -302,9 +370,9 @@ const NAV_ITEMS: {
   label: string;
   icon: typeof Palette;
 }[] = [
-    { id: "appearance", label: "Appearance", icon: Palette },
-    { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
-  ];
+  { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
+];
 
 function CloseButton({ onClick }: { onClick: () => void }) {
   return (
@@ -340,11 +408,9 @@ function CloseButton({ onClick }: { onClick: () => void }) {
 }
 
 export default function App() {
-  const [activePane, setActivePane] =
-    useState<Pane>("appearance");
+  const [activePane, setActivePane] = useState<Pane>("appearance");
   const [appVersion, setAppVersion] = useState("");
-  const paneRef =
-    useRef<HTMLDivElement>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const focusInitialControl = () => {
@@ -352,8 +418,7 @@ export default function App() {
     };
     focusInitialControl();
     window.addEventListener("focus", focusInitialControl);
-    return () =>
-      window.removeEventListener("focus", focusInitialControl);
+    return () => window.removeEventListener("focus", focusInitialControl);
   }, []);
 
   useEffect(() => {
@@ -363,14 +428,14 @@ export default function App() {
       }
     };
     window.addEventListener("keydown", handleKeyDown);
-    return () =>
-      window.removeEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   useEffect(() => {
-    api.getAppVersion()
+    api
+      .getAppVersion()
       .then((v) => setAppVersion(v))
-      .catch(() => { });
+      .catch(() => {});
   }, []);
 
   return (
@@ -398,15 +463,14 @@ export default function App() {
               key={id}
               type="button"
               onClick={() => setActivePane(id)}
-              className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium ${activePane === id
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-                }`}
+              className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium ${
+                activePane === id
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               <Icon className="h-4 w-4" />
-              <span className="flex-1 text-left">
-                {label}
-              </span>
+              <span className="flex-1 text-left">{label}</span>
             </button>
           ))}
         </nav>
