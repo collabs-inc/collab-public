@@ -1,6 +1,7 @@
 import {
 	tiles, getTile, defaultSize, snapToGrid,
 } from "./canvas-state.js";
+import { ZOOM_LEVELS } from "./canvas-viewport.js";
 
 /**
  * Find a non-overlapping position on the canvas for a tile of the
@@ -136,14 +137,15 @@ export function createCanvasRpc({
 					};
 					break;
 				}
-				case "viewportSet": {
-					if (params.pan) {
-						viewportState.panX = params.pan.x;
-						viewportState.panY = params.pan.y;
-					}
-					if (params.zoom !== undefined) {
-						viewportState.zoom = params.zoom;
-					}
+			case "viewportSet": {
+				if (params.pan) {
+					viewportState.panX = params.pan.x;
+					viewportState.panY = params.pan.y;
+				}
+				if (params.zoom !== undefined) {
+					viewportState.zoom = ZOOM_LEVELS.reduce((a, b) =>
+						Math.abs(b - params.zoom) < Math.abs(a - params.zoom) ? b : a);
+				}
 					viewport.updateCanvas();
 					tileManager.saveCanvasDebounced();
 					result = {};

@@ -1,10 +1,22 @@
-const ZOOM_MIN = 0.33;
-const ZOOM_MAX = 1;
-const ZOOM_RUBBER_BAND_K = 400;
+const ZOOM_LEVELS = [0.25, 0.5, 1, 1.5];
+const ZOOM_MIN = ZOOM_LEVELS[0];
+const ZOOM_MAX = ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
 const CELL = 20;
 const MAJOR = 80;
 
 const isMac = typeof navigator !== "undefined" && navigator.platform.startsWith("Mac");
+
+function nearestZoomIndex(zoom) {
+	let best = 0;
+	let bestDist = Math.abs(zoom - ZOOM_LEVELS[0]);
+	for (let i = 1; i < ZOOM_LEVELS.length; i++) {
+		const d = Math.abs(zoom - ZOOM_LEVELS[i]);
+		if (d < bestDist) { bestDist = d; best = i; }
+	}
+	return best;
+}
+
+export { ZOOM_LEVELS };
 
 export function shouldZoom(e, mac = isMac) {
 	return e.ctrlKey || (mac && e.metaKey);
@@ -18,7 +30,6 @@ export function createViewport(canvasEl, gridCanvas) {
 	const gridCtx = gridCanvas.getContext("2d");
 	let state = null;
 	let onUpdate = null;
-	let zoomSnapTimer = null;
 	let zoomSnapRaf = null;
 	let lastZoomFocalX = 0;
 	let lastZoomFocalY = 0;
@@ -92,18 +103,32 @@ export function createViewport(canvasEl, gridCanvas) {
 		if (onUpdate) onUpdate();
 	}
 
-	function snapBackZoom() {
-		const fx = lastZoomFocalX;
-		const fy = lastZoomFocalY;
-		const target = state.zoom > ZOOM_MAX ? ZOOM_MAX : ZOOM_MIN;
+	let zoomDeltaAccum = 0;
+	const SNAP_THRESHOLD = 30;
 
-		function animate() {
+	const ZOOM_DURATION = 180;
+
+	function easeOutCubic(t) {
+		return 1 - (1 - t) ** 3;
+	}
+
+	function animateToZoom(target, fx, fy) {
+		if (zoomSnapRaf) {
+			cancelAnimationFrame(zoomSnapRaf);
+			zoomSnapRaf = null;
+		}
+
+		const startZoom = state.zoom;
+		const startPanX = state.panX;
+		const startPanY = state.panY;
+		const startTime = performance.now();
+
+		function animate(now) {
+			const t = Math.min((now - startTime) / ZOOM_DURATION, 1);
+			const eased = easeOutCubic(t);
+
 			const prevScale = state.zoom;
-			state.zoom += (target - state.zoom) * 0.15;
-
-			if (Math.abs(state.zoom - target) < 0.001) {
-				state.zoom = target;
-			}
+			state.zoom = startZoom + (target - startZoom) * eased;
 
 			const ratio = state.zoom / prevScale - 1;
 			state.panX -= (fx - state.panX) * ratio;
@@ -111,52 +136,34 @@ export function createViewport(canvasEl, gridCanvas) {
 			showZoomIndicator();
 			updateCanvas();
 
-			if (state.zoom === target) {
+			if (t < 1) {
+				zoomSnapRaf = requestAnimationFrame(animate);
+			} else {
 				zoomSnapRaf = null;
-				return;
 			}
-			zoomSnapRaf = requestAnimationFrame(animate);
 		}
 
 		zoomSnapRaf = requestAnimationFrame(animate);
 	}
 
 	function applyZoom(deltaY, focalX, focalY) {
-		if (zoomSnapRaf) {
-			cancelAnimationFrame(zoomSnapRaf);
-			zoomSnapRaf = null;
-		}
-		clearTimeout(zoomSnapTimer);
-
-		const prevScale = state.zoom;
-		let factor = Math.exp((-deltaY * 0.6) / 100);
-
-		if (state.zoom >= ZOOM_MAX && factor > 1) {
-			const overshoot = state.zoom / ZOOM_MAX - 1;
-			const damping = 1 / (1 + overshoot * ZOOM_RUBBER_BAND_K);
-			factor = 1 + (factor - 1) * damping;
-			state.zoom *= factor;
-		} else if (state.zoom <= ZOOM_MIN && factor < 1) {
-			const overshoot = ZOOM_MIN / state.zoom - 1;
-			const damping = 1 / (1 + overshoot * ZOOM_RUBBER_BAND_K);
-			factor = 1 - (1 - factor) * damping;
-			state.zoom *= factor;
-		} else {
-			state.zoom *= factor;
-		}
-
-		const ratio = state.zoom / prevScale - 1;
-		state.panX -= (focalX - state.panX) * ratio;
-		state.panY -= (focalY - state.panY) * ratio;
 		lastZoomFocalX = focalX;
 		lastZoomFocalY = focalY;
 
-		if (state.zoom > ZOOM_MAX || state.zoom < ZOOM_MIN) {
-			zoomSnapTimer = setTimeout(snapBackZoom, 150);
-		}
+		zoomDeltaAccum += deltaY;
 
-		showZoomIndicator();
-		updateCanvas();
+		if (Math.abs(zoomDeltaAccum) < SNAP_THRESHOLD) return;
+
+		const direction = zoomDeltaAccum > 0 ? -1 : 1;
+		zoomDeltaAccum = 0;
+
+		const curIdx = nearestZoomIndex(state.zoom);
+		const nextIdx = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, curIdx + direction));
+		const target = ZOOM_LEVELS[nextIdx];
+
+		if (target === state.zoom) return;
+
+		animateToZoom(target, focalX, focalY);
 	}
 
 	canvasEl.addEventListener("wheel", (e) => {
