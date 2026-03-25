@@ -44,10 +44,16 @@ import {
 import { stopImageWorker } from "./image-service";
 import { installCli } from "./cli-installer";
 
-// macOS apps launched from Finder don't inherit the user's shell
-// LANG, so child processes (tmux, shells) default to ASCII.
-if (!process.env.LANG || !process.env.LANG.includes("UTF-8")) {
-  process.env.LANG = "en_US.UTF-8";
+const IS_WIN = process.platform === "win32";
+const IS_MAC = process.platform === "darwin";
+
+// Ensure UTF-8 locale for child processes.
+// macOS apps launched from Finder don't inherit the user's shell LANG.
+// Windows: set console code page hint (node-pty/conpty handles this natively).
+if (!IS_WIN) {
+  if (!process.env.LANG || !process.env.LANG.includes("UTF-8")) {
+    process.env.LANG = "en_US.UTF-8";
+  }
 }
 
 process.on("uncaughtException", (error) => {
@@ -89,18 +95,16 @@ if (savedTheme === "light" || savedTheme === "dark") {
 let globalZoomLevel = 0;
 
 if (!app.isPackaged) {
-  // Vite dev uses a relaxed renderer policy for HMR; suppress Electron's
-  // repeated dev-only security banner so actionable logs stay visible.
   process.env["ELECTRON_DISABLE_SECURITY_WARNINGS"] = "true";
 }
 
 // macOS GUI apps launched from Finder get a minimal PATH from launchd.
 // Resolve the user's full shell PATH so child processes (terminal, git) work.
-if (app.isPackaged && process.platform === "darwin") {
+if (app.isPackaged && IS_MAC) {
   try {
-    const shell = process.env["SHELL"] || "/bin/zsh";
+    const userShell = process.env["SHELL"] || "/bin/zsh";
     const output = execFileSync(
-      shell,
+      userShell,
       ["-l", "-c", 'printf "%s" "$PATH"'],
       { encoding: "utf8", timeout: 5000 },
     );
@@ -317,10 +321,8 @@ function applyZoomToAll(level: number): void {
 }
 
 function buildAppMenu(): void {
-  const isMac = process.platform === "darwin";
-
   const template: Electron.MenuItemConstructorOptions[] = [
-    ...(isMac
+    ...(IS_MAC
       ? [
           {
             label: app.name,
@@ -354,6 +356,19 @@ function buildAppMenu(): void {
           registerAccelerator: false,
           click: () => sendShortcut("add-workspace"),
         },
+        ...(!IS_MAC
+          ? [
+              { type: "separator" as const },
+              {
+                label: "Settings",
+                accelerator: "CommandOrControl+,",
+                registerAccelerator: false,
+                click: () => sendShortcut("toggle-settings"),
+              } as Electron.MenuItemConstructorOptions,
+              { type: "separator" as const },
+              { role: "quit" as const },
+            ]
+          : []),
       ],
     },
     {
@@ -404,7 +419,7 @@ function buildAppMenu(): void {
         { role: "toggleDevTools" },
         {
           label: "Toggle Full Screen",
-          accelerator: "Ctrl+Cmd+F",
+          accelerator: IS_MAC ? "Ctrl+Cmd+F" : "F11",
           click: (_, win) => win?.setFullScreen(!win.isFullScreen()),
         },
       ],
@@ -414,7 +429,7 @@ function buildAppMenu(): void {
       submenu: [
         { role: "minimize" },
         { role: "zoom" },
-        ...(isMac
+        ...(IS_MAC
           ? [
               { type: "separator" as const },
               { role: "front" as const },
@@ -452,10 +467,23 @@ function createWindow(): void {
     height: state.height,
     minWidth: 400,
     minHeight: 400,
-    titleBarStyle: "hidden",
-    vibrancy: "under-window",
-    visualEffectState: "active",
-    trafficLightPosition: { x: 14, y: 12 },
+    // Platform-specific window chrome
+    ...(IS_MAC
+      ? {
+          titleBarStyle: "hidden" as const,
+          vibrancy: "under-window" as const,
+          visualEffectState: "active" as const,
+          trafficLightPosition: { x: 14, y: 12 },
+        }
+      : {
+          // Windows / Linux: use native title bar with custom style
+          titleBarStyle: "hidden" as const,
+          titleBarOverlay: {
+            color: "#1e1e1e",
+            symbolColor: "#cccccc",
+            height: 36,
+          },
+        }),
     webPreferences: {
       preload: getPreloadPath("shell"),
       contextIsolation: true,
@@ -708,7 +736,7 @@ app.on("web-contents-created", (_event, contents) => {
 
 app.whenReady().then(async () => {
   // Set a standard Chrome user-agent on the browser tile session so sites
-  // (especially Google OAuth) treat it as a real browser, not an embedded webview.
+  // treat it as a real browser, not an embedded webview.
   const browserSession = session.fromPartition("persist:browser");
   const electronUA = browserSession.getUserAgent();
   browserSession.setUserAgent(
@@ -716,10 +744,14 @@ app.whenReady().then(async () => {
   );
 
   protocol.handle("collab-file", (request) => {
-    const filePath = decodeURIComponent(
+    let filePath = decodeURIComponent(
       new URL(request.url).pathname,
     );
-    return net.fetch(`file://${filePath}`);
+    // On Windows, pathname will be like /C:/Users/... — strip leading slash
+    if (IS_WIN && filePath.startsWith("/") && filePath[2] === ":") {
+      filePath = filePath.slice(1);
+    }
+    return net.fetch(pathToFileURL(filePath).href);
   });
 
   shuttingDown = false;
@@ -727,9 +759,11 @@ app.whenReady().then(async () => {
   try {
     pty.verifyTmuxAvailable();
   } catch (err) {
-    console.error(
-      "tmux binary not found or not executable:", err,
-    );
+    if (!IS_WIN) {
+      console.error(
+        "tmux binary not found or not executable:", err,
+      );
+    }
   }
 
   config = loadConfig();

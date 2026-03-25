@@ -1,12 +1,50 @@
 import { defineConfig } from "electron-vite";
 import { resolve } from "path";
+import { readFileSync, writeFileSync, readdirSync } from "fs";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 const outDir = "out";
 
+// Vite plugin: after writing main process bundles, rewrite
+// `import { app, BrowserWindow } from "electron"` to
+// `import _electron from "electron"; const { app, BrowserWindow } = _electron;`
+// Electron 28's Node 18 ESM loader cannot extract named exports from CJS.
+function fixElectronImportsPlugin() {
+  return {
+    name: "fix-electron-imports",
+    writeBundle(options, bundle) {
+      const dir = options.dir;
+      if (!dir) return;
+      for (const fileName of Object.keys(bundle)) {
+        if (!fileName.endsWith(".js")) continue;
+        const filePath = resolve(dir, fileName);
+        let code;
+        try {
+          code = readFileSync(filePath, "utf-8");
+        } catch {
+          continue;
+        }
+        let changed = false;
+        code = code.replace(
+          /^import\s*\{([^}]+)\}\s*from\s*"electron"\s*;?/gm,
+          (_match, names) => {
+            changed = true;
+            return `import _electron from "electron";\nconst { ${names.trim()} } = _electron;`;
+          },
+        );
+        if (changed) {
+          writeFileSync(filePath, code);
+          console.log(`[fix-electron-imports] Patched ${fileName}`);
+        }
+      }
+    },
+  };
+}
+
 export default defineConfig({
   main: {
+    plugins: [fixElectronImportsPlugin()],
     resolve: {
       alias: {
         "@collab/shared": resolve(__dirname, "packages/shared/src"),

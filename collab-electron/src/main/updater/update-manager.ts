@@ -1,7 +1,16 @@
-import electronUpdater from "electron-updater";
-const { autoUpdater } = electronUpdater;
 import { app, BrowserWindow, ipcMain, powerMonitor } from "electron";
 import { trackEvent } from "../analytics";
+
+// Lazy-load electron-updater to avoid crash during module init
+// (it accesses app.getVersion() at import time, which fails before app is ready).
+let _autoUpdater: any = null;
+function getAutoUpdater() {
+  if (!_autoUpdater) {
+    const mod = require("electron-updater");
+    _autoUpdater = mod.autoUpdater || mod.default?.autoUpdater;
+  }
+  return _autoUpdater;
+}
 
 export type UpdateStatus =
   | "idle"
@@ -35,6 +44,8 @@ class UpdateManager {
     if (this.initialized) return;
     this.onBeforeQuit = opts?.onBeforeQuit ?? null;
 
+    const autoUpdater = getAutoUpdater();
+
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.logger = {
@@ -48,7 +59,7 @@ class UpdateManager {
       this.setState({ status: "checking" });
     });
 
-    autoUpdater.on("update-available", (info) => {
+    autoUpdater.on("update-available", (info: any) => {
       const releaseNotes =
         typeof info.releaseNotes === "string"
           ? info.releaseNotes
@@ -65,14 +76,14 @@ class UpdateManager {
       this.setState({ status: "idle" });
     });
 
-    autoUpdater.on("download-progress", (progress) => {
+    autoUpdater.on("download-progress", (progress: any) => {
       this.setState({
         status: "downloading",
         progress: Math.round(progress.percent),
       });
     });
 
-    autoUpdater.on("update-downloaded", (info) => {
+    autoUpdater.on("update-downloaded", (info: any) => {
       const releaseNotes =
         typeof info.releaseNotes === "string"
           ? info.releaseNotes
@@ -85,7 +96,7 @@ class UpdateManager {
       trackEvent("update_downloaded", { version: info.version });
     });
 
-    autoUpdater.on("error", (err) => {
+    autoUpdater.on("error", (err: Error) => {
       trackEvent("update_download_failed", { error: err.message });
       this.handleError(err.message);
     });
@@ -112,7 +123,7 @@ class UpdateManager {
     if (s === "error") this.clearErrorTimeout();
 
     try {
-      await autoUpdater.checkForUpdates();
+      await getAutoUpdater().checkForUpdates();
     } catch (err) {
       this.handleError((err as Error).message);
     }
@@ -122,7 +133,7 @@ class UpdateManager {
     if (this.state.status !== "available") return;
 
     try {
-      await autoUpdater.downloadUpdate();
+      await getAutoUpdater().downloadUpdate();
     } catch (err) {
       this.handleError((err as Error).message);
     }
@@ -136,15 +147,11 @@ class UpdateManager {
 
     if (!app.isPackaged) return;
 
-    // MacUpdater.quitAndInstall() uses the native Squirrel updater,
-    // which terminates the process without firing before-quit. Run
-    // cleanup explicitly so PTY sessions, watchers, and servers are
-    // shut down on every platform.
     if (this.onBeforeQuit) {
       await this.onBeforeQuit();
     }
 
-    autoUpdater.quitAndInstall();
+    getAutoUpdater().quitAndInstall();
   }
 
   getState(): UpdateState {

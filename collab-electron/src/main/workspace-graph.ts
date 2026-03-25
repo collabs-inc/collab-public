@@ -10,12 +10,27 @@ import {
 } from "node:path";
 import type { SyntaxNodeRef } from "@lezer/common";
 import { parser as pythonParser } from "@lezer/python";
-import {
-  cruise,
-  type ICruiseOptions,
-  type IResolveOptions,
-} from "dependency-cruiser";
-import extractTSConfig from "dependency-cruiser/config-utl/extract-ts-config";
+// dependency-cruiser is ESM-only; use dynamic import() for CJS compat.
+type ICruiseOptions = any;
+type IResolveOptions = any;
+let _cruise: typeof import("dependency-cruiser").cruise | null = null;
+let _extractTSConfig: any = null;
+
+async function getCruise() {
+  if (!_cruise) {
+    const mod = await import("dependency-cruiser");
+    _cruise = mod.cruise;
+  }
+  return _cruise;
+}
+
+async function getExtractTSConfig() {
+  if (!_extractTSConfig) {
+    const mod = await import("dependency-cruiser/config-utl/extract-ts-config");
+    _extractTSConfig = mod.default;
+  }
+  return _extractTSConfig;
+}
 import { createFileFilter, type FileFilter } from "./file-filter";
 import { shouldIncludeEntryWithContent } from "./files";
 
@@ -453,6 +468,7 @@ async function buildJavaScriptTypeScriptImportLinks(
       resolveOptions.alias = group.context.alias;
     }
 
+    const cruise = await getCruise();
     const reporterOutput = await cruise(
       group.files.map((file) => file.id),
       cruiseOptions,
@@ -1293,7 +1309,8 @@ async function listConfigCandidates(
   const configPaths =
     await listTypeScriptConfigPaths(workspacePath);
 
-  return configPaths
+  const extractTSConfig = await getExtractTSConfig();
+  const results = configPaths
     .map((configPath) => {
       try {
         const parsed = extractTSConfig(configPath);
@@ -1315,7 +1332,8 @@ async function listConfigCandidates(
         candidate,
       ): candidate is ConfigCandidate =>
         candidate !== null,
-    )
+    );
+  return results
     .sort(compareConfigCandidates);
 }
 

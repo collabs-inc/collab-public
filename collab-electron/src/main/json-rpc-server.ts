@@ -1,3 +1,12 @@
+/**
+ * JSON-RPC server over IPC.
+ *
+ * - Windows: uses a named pipe (\\.\pipe\collaborator-ipc)
+ * - macOS/Linux: uses a Unix domain socket (~/.collaborator/ipc.sock)
+ *
+ * The protocol is newline-delimited JSON-RPC 2.0.
+ */
+
 import { createServer, type Server, type Socket } from "node:net";
 import {
   existsSync,
@@ -9,12 +18,30 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { COLLAB_DIR } from "./paths";
 
-const SOCKET_PATH = join(COLLAB_DIR, "ipc.sock");
-// Write the breadcrumb to the base directory (~/.collaborator/)
-// so the hook script can discover the socket regardless of
-// whether the app is running in dev or prod mode.
+/* ------------------------------------------------------------------ */
+/*  IPC path — platform-aware                                          */
+/* ------------------------------------------------------------------ */
+
+const IS_WIN = process.platform === "win32";
+
+function getSocketPath(): string {
+  if (IS_WIN) {
+    // Windows named pipe — no file on disk to clean up.
+    return "\\\\.\\pipe\\collaborator-ipc";
+  }
+  return join(COLLAB_DIR, "ipc.sock");
+}
+
+const SOCKET_PATH = getSocketPath();
+
+// Breadcrumb so external scripts can discover the IPC endpoint
+// regardless of dev/prod mode.
 const BASE_DIR = join(homedir(), ".collaborator");
 const SOCKET_PATH_FILE = join(BASE_DIR, "socket-path");
+
+/* ------------------------------------------------------------------ */
+/*  Method registry                                                    */
+/* ------------------------------------------------------------------ */
 
 type MethodHandler = (
   params: unknown,
@@ -53,8 +80,13 @@ function discoverMethods(): {
     ...(entry.params ? { params: entry.params } : {}),
   }));
 }
+
 let server: Server | null = null;
 const connections = new Set<Socket>();
+
+/* ------------------------------------------------------------------ */
+/*  JSON-RPC helpers                                                   */
+/* ------------------------------------------------------------------ */
 
 function isJsonRpcRequest(obj: unknown): obj is JsonRpcRequest {
   if (typeof obj !== "object" || obj === null) return false;
@@ -108,6 +140,10 @@ async function handleMessage(
   }
 }
 
+/* ------------------------------------------------------------------ */
+/*  Connection handler                                                 */
+/* ------------------------------------------------------------------ */
+
 function handleConnection(socket: Socket): void {
   connections.add(socket);
   let buffer = "";
@@ -142,7 +178,14 @@ function handleConnection(socket: Socket): void {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/*  Cleanup                                                            */
+/* ------------------------------------------------------------------ */
+
 function cleanupStaleSocket(): void {
+  // Named pipes on Windows don't leave files on disk, so no cleanup needed.
+  if (IS_WIN) return;
+
   if (existsSync(SOCKET_PATH)) {
     try {
       unlinkSync(SOCKET_PATH);
@@ -151,6 +194,10 @@ function cleanupStaleSocket(): void {
     }
   }
 }
+
+/* ------------------------------------------------------------------ */
+/*  Public API                                                         */
+/* ------------------------------------------------------------------ */
 
 export function registerMethod(
   method: string,
@@ -183,6 +230,7 @@ export function startJsonRpcServer(): Promise<void> {
     );
 
     server.listen(SOCKET_PATH, () => {
+      mkdirSync(BASE_DIR, { recursive: true });
       writeFileSync(SOCKET_PATH_FILE, SOCKET_PATH, "utf-8");
       console.log(
         `[json-rpc] Listening on ${SOCKET_PATH}`,
