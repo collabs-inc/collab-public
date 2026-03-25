@@ -1173,6 +1173,22 @@ async function init() {
 			dragDropOverlay.classList.remove("visible");
 		}
 
+		// Extract external file paths synchronously BEFORE any await,
+		// because the browser clears dataTransfer after the event handler yields.
+		const externalPaths = [];
+		if (e.dataTransfer?.files) {
+			for (let i = 0; i < e.dataTransfer.files.length; i++) {
+				const f = e.dataTransfer.files[i];
+				const p = window.shellApi.getPathForFile
+					? window.shellApi.getPathForFile(f)
+					: f.path;
+				if (p) {
+					console.log(`[drop] External file: "${p}"`);
+					externalPaths.push(p);
+				}
+			}
+		}
+
 		const rect = canvasEl.getBoundingClientRect();
 		const screenX = e.clientX - rect.left;
 		const screenY = e.clientY - rect.top;
@@ -1187,11 +1203,8 @@ async function init() {
 				paths = await window.shellApi.getDragPaths();
 			} catch { /* noop */ }
 		}
-		if (paths.length === 0 && e.dataTransfer?.files) {
-			for (let i = 0; i < e.dataTransfer.files.length; i++) {
-				const p = e.dataTransfer.files[i].path;
-				if (p) paths.push(p);
-			}
+		if (paths.length === 0) {
+			paths = externalPaths;
 		}
 		if (paths.length === 0) return;
 
