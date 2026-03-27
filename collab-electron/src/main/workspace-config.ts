@@ -6,12 +6,14 @@ export interface WorkspaceConfig {
   selected_file: string | null;
   expanded_dirs: string[];
   agent_skip_permissions: boolean;
+  auto_created_graph: boolean;
 }
 
 const DEFAULT_CONFIG: WorkspaceConfig = {
   selected_file: null,
   expanded_dirs: [],
   agent_skip_permissions: false,
+  auto_created_graph: false,
 };
 
 export function workspaceConfigPath(workspacePath: string): string {
@@ -34,6 +36,8 @@ export function loadWorkspaceConfig(
         : [],
       agent_skip_permissions:
         parsed.agent_skip_permissions === true,
+      auto_created_graph:
+        parsed.auto_created_graph === true,
     };
   } catch {
     return { ...DEFAULT_CONFIG };

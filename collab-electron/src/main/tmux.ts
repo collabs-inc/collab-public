@@ -3,23 +3,15 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { COLLAB_DIR } from "./paths";
+import type { SessionMeta } from "./terminal-backend";
 
-export interface SessionMeta {
-  shell: string;
-  cwd: string;
-  createdAt: string;
-}
+// Re-export SessionMeta for backward compatibility
+export type { SessionMeta };
 
 export const SESSION_DIR = path.join(
   COLLAB_DIR, "terminal-sessions",
 );
-function getSocketName(): string {
-  const app = getApp();
-  if (app && !app.isPackaged) return "collab-dev";
-  return "collab";
-}
-
-export { getSocketName };
+const SOCKET_NAME = "collab";
 
 // Electron app module — unavailable in unit tests.
 // Lazy-loaded to avoid crashing bun test.
@@ -32,6 +24,10 @@ function getApp(): typeof import("electron").app | null {
 }
 
 export function getTmuxBin(): string {
+  // tmux is only available on macOS/Linux
+  if (process.platform === "win32") {
+    throw new Error("tmux is not available on Windows");
+  }
   const app = getApp();
   if (app?.isPackaged) {
     return path.join(process.resourcesPath, "tmux");
@@ -41,6 +37,10 @@ export function getTmuxBin(): string {
 
 
 export function getTmuxConf(): string {
+  // tmux.conf is only needed on macOS/Linux
+  if (process.platform === "win32") {
+    throw new Error("tmux configuration is not needed on Windows");
+  }
   const app = getApp();
   if (app?.isPackaged) {
     return path.join(process.resourcesPath, "tmux.conf");
@@ -53,6 +53,11 @@ export function getTmuxConf(): string {
 }
 
 export function getTerminfoDir(): string | undefined {
+  // terminfo is only needed for tmux on macOS/Linux
+  // Windows does not use tmux and does not need terminfo
+  if (process.platform === "win32") {
+    return undefined;
+  }
   const app = getApp();
   if (app?.isPackaged) {
     return path.join(process.resourcesPath, "terminfo");
@@ -61,39 +66,32 @@ export function getTerminfoDir(): string | undefined {
 }
 
 function baseArgs(): string[] {
-  return ["-L", getSocketName(), "-u", "-f", getTmuxConf()];
+  return ["-L", SOCKET_NAME, "-u", "-f", getTmuxConf()];
 }
 
 function tmuxEnv(): Record<string, string> | undefined {
   const dir = getTerminfoDir();
   if (!dir) return undefined;
-  return { ...process.env, TERMINFO: dir } as Record<string, string>;
+
+  const env: Record<string, string> = {};
+  // Filter out undefined values and build a clean string-only record
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) {
+      env[key] = value;
+    }
+  }
+  env.TERMINFO = dir;
+  return env;
 }
 
 export function tmuxExec(...args: string[]): string {
-  try {
-    return execFileSync(
-      getTmuxBin(), [...baseArgs(), ...args],
-      { encoding: "utf8", timeout: 5000, env: tmuxEnv() },
-    ).trim();
-  } catch (err: unknown) {
-    if (isEnoent(err)) {
-      const app = getApp();
-      const hint = app?.isPackaged
-        ? "Bundled tmux binary is missing from resources."
-        : "tmux is required for dev mode. Install it with: brew install tmux";
-      throw new Error(hint);
-    }
-    throw err;
+  if (process.platform === "win32") {
+    throw new Error("tmux is not available on Windows");
   }
-}
-
-function isEnoent(err: unknown): boolean {
-  return (
-    err instanceof Error &&
-    "code" in err &&
-    (err as NodeJS.ErrnoException).code === "ENOENT"
-  );
+  return execFileSync(
+    getTmuxBin(), [...baseArgs(), ...args],
+    { encoding: "utf8", timeout: 5000, env: tmuxEnv() },
+  ).trim();
 }
 
 export function tmuxExecAsync(

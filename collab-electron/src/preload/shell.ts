@@ -162,6 +162,11 @@ contextBridge.exposeInMainWorld("shellApi", {
     ipcRenderer.invoke("workspace:switch", index),
   workspaceList: () => ipcRenderer.invoke("workspace:list"),
 
+  getWorkspaceConfig: (workspacePath: string) =>
+    ipcRenderer.invoke("workspace-config:get", workspacePath),
+  setWorkspaceConfig: (workspacePath: string, config: object) =>
+    ipcRenderer.invoke("workspace-config:set", workspacePath, config),
+
   onWorkspaceChanged: (cb: (path: string) => void) => {
     const handler = (_event: unknown, path: string) => cb(path);
     ipcRenderer.on("shell:workspace-changed", handler);
@@ -201,6 +206,11 @@ contextBridge.exposeInMainWorld("shellApi", {
   showContextMenu: (
     items: Array<{ id: string; label: string; enabled?: boolean }>,
   ) => ipcRenderer.invoke("context-menu:show", items),
+
+  // Window controls (for custom title bar on Windows)
+  minimizeWindow: () => ipcRenderer.send("window:minimize"),
+  maximizeWindow: () => ipcRenderer.send("window:maximize"),
+  closeWindow: () => ipcRenderer.send("window:close"),
 
   openExternal: (url: string) => ipcRenderer.send("shell:open-external", url),
 

@@ -6,16 +6,22 @@ Collaborator is a place to build with agents.
 
 Collaborator is an end-to-end environment for agentic development. Terminals, context files, and running code — all arranged on an infinite canvas in one place. No context switching, no tab hunting. Just your agents and your work, side by side.
 
-The app is early-stage and in active development. macOS only for now.
+The app is early-stage and in active development. macOS and Windows supported.
 
 ## Install
 
-**[Download the latest release](https://github.com/collaborator-ai/collab-public/releases/latest)** (macOS, Apple Silicon)
+**[Download the latest release](https://github.com/collaborator-ai/collab-public/releases/latest)** (macOS Apple Silicon, Windows x64)
 
 Or install from the command line:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/collaborator-ai/collab-public/main/install.sh | bash
+```
+
+For Windows, use the PowerShell installer:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/collaborator-ai/collab-public/main/collab-electron/install.ps1' -UseBasicParsing | Invoke-Expression"
 ```
 
 ## Stack
@@ -60,7 +66,7 @@ All data is stored locally on disk.
 
 ### Application overview
 
-Collaborator is a single-window application for macOS (arm64). It operates primarily on local files with no accounts required. Anonymous, non-identifying usage analytics are collected via PostHog.
+Collaborator is a single-window application for macOS (arm64) and Windows (x64). It operates primarily on local files with no accounts required. Anonymous, non-identifying usage analytics are collected via PostHog.
 
 The window is divided into two regions:
 

@@ -18,6 +18,7 @@ data/
 *.db-journal
 *.db-wal
 *.db-shm
+chroma_data/
 
 # Playwright MCP
 .playwright-mcp/

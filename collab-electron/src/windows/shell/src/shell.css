@@ -7,7 +7,7 @@
 	--canvas-bg: rgb(230, 230, 230);
 	--canvas-bg-hi: rgb(244, 244, 244);
 	--canvas-bg-rgb: 230, 230, 230;
-	--canvas-opacity: 0.5;
+	--canvas-opacity: 0.25;
 	--fg: rgb(32, 32, 32);
 	--border: rgb(206, 206, 206);
 	--tile-border: rgb(180, 180, 180);
@@ -72,6 +72,41 @@ body {
 	z-index: 100;
 	display: flex;
 	align-items: center;
+	justify-content: flex-end;
+	background: var(--bg);
+}
+
+/* Windows window controls */
+#window-controls {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	height: 100%;
+	-webkit-app-region: no-drag;
+}
+
+#window-controls button {
+	width: 46px;
+	height: 100%;
+	border: none;
+	background: transparent;
+	color: var(--fg);
+	font-size: 14px;
+	cursor: pointer;
+	transition: background 0.15s;
+}
+
+#window-controls button:hover {
+	background: rgba(128, 128, 128, 0.2);
+}
+
+#window-controls #btn-close:hover {
+	background: #e81123;
+}
+
+#window-controls #btn-maximize,
+#window-controls #btn-minimize {
+	font-size: 12px;
 }
 
 #alpha-label {

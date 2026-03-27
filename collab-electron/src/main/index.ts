@@ -1,7 +1,6 @@
 import {
   app,
   BrowserWindow,
-  dialog,
   ipcMain,
   Menu,
   nativeTheme,
@@ -45,11 +44,22 @@ import {
 import { stopImageWorker } from "./image-service";
 import { installCli } from "./cli-installer";
 
+// Platform-specific environment setup
 // macOS apps launched from Finder don't inherit the user's shell
 // LANG, so child processes (tmux, shells) default to ASCII.
-if (!process.env.LANG || !process.env.LANG.includes("UTF-8")) {
-  process.env.LANG = "en_US.UTF-8";
+if (process.platform === "darwin") {
+  if (!process.env.LANG || !process.env.LANG.includes("UTF-8")) {
+    process.env.LANG = "en_US.UTF-8";
+  }
 }
+// Windows: Set default code page to UTF-8 for consistent encoding
+if (process.platform === "win32") {
+  process.env.CHCP = "65001";
+}
+
+// Linux: Placeholder for future platform support
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const isLinux = process.platform === "linux";
 
 process.on("uncaughtException", (error) => {
   trackEvent("app_crash", {
@@ -113,6 +123,16 @@ if (app.isPackaged && process.platform === "darwin") {
     // Fall through with the default PATH if shell resolution fails.
   }
 }
+// Windows: Ensure system paths are available for child processes
+if (process.platform === "win32") {
+  // Windows GUI apps may have limited PATH; ensure System32 is available
+  const systemRoot = process.env["SystemRoot"] || "C:\\Windows";
+  const windir = process.env["windir"] || systemRoot;
+  const system32 = join(systemRoot, "System32");
+  if (!process.env["PATH"]?.includes(system32)) {
+    process.env["PATH"] = [system32, windir, systemRoot, process.env["PATH"]].filter(Boolean).join(";");
+  }
+}
 
 const DEFAULT_STATE: WindowState = {
   x: 0,
@@ -121,7 +141,27 @@ const DEFAULT_STATE: WindowState = {
   height: 800,
 };
 
+function isValidWindowState(state: WindowState): boolean {
+  return (
+    isFinite(state.x) &&
+    isFinite(state.y) &&
+    isFinite(state.width) &&
+    isFinite(state.height) &&
+    state.width > 0 &&
+    state.height > 0
+  );
+}
+
+function shouldUseSavedWindowState(state: WindowState | null): boolean {
+  if (state === null) return false;
+  // If window was maximized, always restore maximized state
+  if (state.isMaximized) return true;
+  // Otherwise, validate bounds and check visibility
+  return isValidWindowState(state) && boundsVisibleOnAnyDisplay(state);
+}
+
 function boundsVisibleOnAnyDisplay(bounds: WindowState): boolean {
+  if (!isValidWindowState(bounds)) return false;
   const displays = screen.getAllDisplays();
   return displays.some((display) => {
     const { x, y, width, height } = display.workArea;
@@ -173,23 +213,26 @@ interface ShortcutEntry {
 
 const TOGGLE_SHORTCUTS: Record<string, ShortcutEntry> = {
   Backslash: { modifier: cmdOrCtrl, action: "toggle-nav" },
-  Backquote: { modifier: cmdOrCtrl, action: "toggle-terminal-list" },
   Comma: { modifier: cmdOrCtrl, action: "toggle-settings" },
+  KeyW: { modifier: shiftCmdOrCtrl, action: "close-tab" },
   KeyO: { modifier: shiftCmdOrCtrl, action: "add-workspace" },
   KeyK: { modifier: cmdOrCtrl, action: "focus-search" },
-  KeyN: { modifier: cmdOrCtrl, action: "new-tile" },
-  KeyW: { modifier: cmdOrCtrl, action: "close-tile" },
 };
 
 const TOGGLE_SHORTCUT_KEYS: Record<string, ShortcutEntry> = {
   "\\": TOGGLE_SHORTCUTS.Backslash!,
-  "`": TOGGLE_SHORTCUTS.Backquote!,
   ",": TOGGLE_SHORTCUTS.Comma!,
+  w: TOGGLE_SHORTCUTS.KeyW!,
   o: TOGGLE_SHORTCUTS.KeyO!,
   k: TOGGLE_SHORTCUTS.KeyK!,
-  n: TOGGLE_SHORTCUTS.KeyN!,
-  w: TOGGLE_SHORTCUTS.KeyW!,
 };
+
+const TAB_SHORTCUTS: Record<string, string> = {};
+const TAB_SHORTCUT_KEYS: Record<string, string> = {};
+for (let i = 1; i <= 9; i++) {
+  TAB_SHORTCUTS[`Digit${i}`] = `switch-tab-${i}`;
+  TAB_SHORTCUT_KEYS[String(i)] = `switch-tab-${i}`;
+}
 
 function normalizeShortcutKey(key: string | undefined): string | null {
   if (!key) return null;
@@ -207,7 +250,21 @@ function resolveToggleShortcut(
     : undefined;
 }
 
-function attachShortcutListener(target: WebContents): void {
+function resolveTabShortcut(
+  input: Electron.Input,
+): string | undefined {
+  const shortcut = TAB_SHORTCUTS[input.code];
+  if (shortcut) return shortcut;
+  const normalizedKey = normalizeShortcutKey(input.key);
+  return normalizedKey
+    ? TAB_SHORTCUT_KEYS[normalizedKey]
+    : undefined;
+}
+
+function attachShortcutListener(
+  target: WebContents,
+  includeTabShortcuts: boolean,
+): void {
   target.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
 
@@ -215,8 +272,25 @@ function attachShortcutListener(target: WebContents): void {
     if (toggle && toggle.modifier(input)) {
       event.preventDefault();
       if (!input.isAutoRepeat) sendShortcut(toggle.action);
+      return;
+    }
+
+    if (includeTabShortcuts) {
+      const tabAction = resolveTabShortcut(input);
+      if (tabAction && cmdOrCtrl(input)) {
+        event.preventDefault();
+        if (!input.isAutoRepeat) sendShortcut(tabAction);
+      }
     }
   });
+}
+
+function isTerminalWebview(wc: WebContents): boolean {
+  try {
+    return wc.getURL().includes("/terminal/");
+  } catch {
+    return false;
+  }
 }
 
 function isBrowserTileWebview(wc: WebContents): boolean {
@@ -261,11 +335,11 @@ function attachBrowserShortcuts(
 }
 
 function registerToggleShortcuts(win: BrowserWindow): void {
-  attachShortcutListener(win.webContents);
+  attachShortcutListener(win.webContents, true);
 
   win.webContents.on("did-attach-webview", (_event, wc) => {
     wc.once("did-finish-load", () => {
-      attachShortcutListener(wc);
+      attachShortcutListener(wc, !isTerminalWebview(wc));
       if (isBrowserTileWebview(wc)) {
         attachBrowserShortcuts(wc, win);
       }
@@ -285,6 +359,7 @@ function applyZoomToAll(level: number): void {
 
 function buildAppMenu(): void {
   const isMac = process.platform === "darwin";
+  const isWindows = process.platform === "win32";
 
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(isMac
@@ -316,24 +391,21 @@ function buildAppMenu(): void {
       label: "File",
       submenu: [
         {
-          label: "New Tile",
-          accelerator: "CommandOrControl+N",
-          registerAccelerator: false,
-          click: () => sendShortcut("new-tile"),
-        },
-        {
-          label: "Close Tile",
-          accelerator: "CommandOrControl+W",
-          registerAccelerator: false,
-          click: () => sendShortcut("close-tile"),
-        },
-        { type: "separator" },
-        {
           label: "Open Workspace\u2026",
           accelerator: "CommandOrControl+Shift+O",
           registerAccelerator: false,
           click: () => sendShortcut("add-workspace"),
         },
+        ...(isWindows ? [
+          { type: "separator" as const },
+          {
+            label: "Exit",
+            accelerator: "Alt+F4",
+            click: () => {
+              mainWindow?.close();
+            },
+          } as Electron.MenuItemConstructorOptions,
+        ] : []),
       ],
     },
     {
@@ -364,12 +436,6 @@ function buildAppMenu(): void {
           registerAccelerator: false,
           click: () => sendShortcut("toggle-nav"),
         },
-        {
-          label: "Toggle Terminal List",
-          accelerator: "CommandOrControl+`",
-          registerAccelerator: false,
-          click: () => sendShortcut("toggle-terminal-list"),
-        },
         { type: "separator" },
         {
           label: "Zoom In",
@@ -390,7 +456,7 @@ function buildAppMenu(): void {
         { role: "toggleDevTools" },
         {
           label: "Toggle Full Screen",
-          accelerator: "Ctrl+Cmd+F",
+          accelerator: isWindows ? "F11" : "Ctrl+Cmd+F",
           click: (_, win) => win?.setFullScreen(!win.isFullScreen()),
         },
       ],
@@ -408,6 +474,21 @@ function buildAppMenu(): void {
           : [{ role: "close" as const }]),
       ],
     },
+    ...(isWindows
+      ? [
+          {
+            label: "Help",
+            submenu: [
+              {
+                label: `About ${app.name}`,
+                click: () => {
+                  trackEvent("menu_about_clicked");
+                },
+              },
+            ],
+          },
+        ]
+      : []),
   ];
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -428,20 +509,29 @@ function getRendererURL(name: string): string {
 
 function createWindow(): void {
   const saved = config.window_state;
-  const useSaved =
-    saved !== null &&
-    (saved.isMaximized || boundsVisibleOnAnyDisplay(saved));
+  const useSaved = shouldUseSavedWindowState(saved);
   const state = useSaved ? saved : DEFAULT_STATE;
+
+  const isMac = process.platform === "darwin";
 
   const windowOptions: Electron.BrowserWindowConstructorOptions = {
     width: state.width,
     height: state.height,
     minWidth: 400,
     minHeight: 400,
-    titleBarStyle: "hidden",
-    vibrancy: "under-window",
-    visualEffectState: "active",
-    trafficLightPosition: { x: 14, y: 12 },
+    // macOS-specific window options
+    titleBarStyle: isMac ? "hidden" : undefined,
+    vibrancy: isMac ? "under-window" : undefined,
+    visualEffectState: isMac ? "active" : undefined,
+    trafficLightPosition: isMac ? { x: 14, y: 12 } : undefined,
+    // Windows-specific window options
+    frame: process.platform === "win32" ? false : undefined,
+    transparent: process.platform === "win32" ? true : undefined,
+    titleBarOverlay: process.platform === "win32" ? {
+      color: "#1e1e1e",
+      symbolColor: "#ffffff",
+      height: 32,
+    } : undefined,
     webPreferences: {
       preload: getPreloadPath("shell"),
       contextIsolation: true,
@@ -502,7 +592,6 @@ ipcMain.handle("shell:get-view-config", () => {
     terminalTile: { src: getRendererURL("terminal-tile"), preload },
     graphTile: { src: getRendererURL("graph-tile"), preload },
     settings: { src: getRendererURL("settings"), preload },
-    terminalList: { src: getRendererURL("terminal-list"), preload },
   };
 });
 
@@ -586,17 +675,6 @@ ipcMain.handle(
   () => pty.discoverSessions(),
 );
 
-ipcMain.handle(
-  "pty:clean-detached",
-  (_event, activeSessionIds: string[]) =>
-    pty.cleanDetachedSessions(activeSessionIds),
-);
-
-ipcMain.handle(
-  "pty:foreground-process",
-  (_event, sessionId: string) => pty.getForegroundProcess(sessionId),
-);
-
 let settingsOpen = false;
 
 function setSettingsOpen(open: boolean): void {
@@ -625,6 +703,29 @@ ipcMain.on(
 
 ipcMain.on("settings:close", () => setSettingsOpen(false));
 ipcMain.on("settings:toggle", () => setSettingsOpen(!settingsOpen));
+
+// Window control IPC handlers (for custom title bar on Windows)
+ipcMain.on("window:minimize", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.minimize();
+  }
+});
+
+ipcMain.on("window:maximize", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  }
+});
+
+ipcMain.on("window:close", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.close();
+  }
+});
 
 function sendLoadingDone(): void {
   mainWindow?.webContents.send("shell:loading-done");
@@ -722,13 +823,15 @@ app.whenReady().then(async () => {
 
   shuttingDown = false;
 
-  const tmuxCheck = pty.verifyTmuxAvailable();
-  if (!tmuxCheck.ok) {
-    console.error("tmux check failed:", tmuxCheck.message);
-    if (!app.isPackaged) {
-      dialog.showErrorBox(
-        "tmux not found",
-        `${tmuxCheck.message}\n\nThe terminal will not work until tmux is installed and on your PATH.`,
+  // Verify terminal backend availability based on platform
+  // macOS/Linux: Check for tmux binary
+  // Windows: node-pty is always available (no external binary required)
+  if (process.platform !== "win32") {
+    try {
+      pty.verifyTmuxAvailable();
+    } catch (err) {
+      console.error(
+        "tmux binary not found or not executable:", err,
       );
     }
   }

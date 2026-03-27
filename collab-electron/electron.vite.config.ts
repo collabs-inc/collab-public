@@ -30,6 +30,15 @@ export default defineConfig({
             __dirname,
             "src/main/image-worker.ts",
           ),
+          // Platform-specific terminal backends (dynamically loaded at runtime)
+          "terminal-backend.windows": resolve(
+            __dirname,
+            "src/main/terminal-backend.windows.ts",
+          ),
+          "terminal-backend.tmux": resolve(
+            __dirname,
+            "src/main/terminal-backend.tmux.ts",
+          ),
         },
       },
     },
