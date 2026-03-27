@@ -173,7 +173,7 @@ export function createTileDOM(tile, callbacks) {
 }
 
 export function getTileLabel(tile) {
-  if (tile.type === "term") return { parent: "", name: "Terminal" };
+  if (tile.type === "term") return { parent: "", name: tile.label || "Terminal" };
   if (tile.type === "browser") {
     if (tile.url) {
       try { return { parent: "", name: new URL(tile.url).hostname }; }

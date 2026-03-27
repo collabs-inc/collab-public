@@ -246,6 +246,7 @@ async function init() {
 				cwd: tile.cwd || "~",
 				foreground: null,
 				tileId: tile.id,
+				label: tile.label || null,
 			});
 		},
 		onTerminalTileClosed(sessionId) {
@@ -364,6 +365,11 @@ async function init() {
 
 		requestAnimationFrame(() => {
 			window.focus();
+			if (surface === "terminal-list") {
+				terminalListWebview.webview.focus();
+				noteSurfaceFocus("terminal-list");
+				return;
+			}
 			if (surface === "settings") {
 				singletonWebviews.settings.webview.focus();
 				noteSurfaceFocus("settings");
@@ -734,7 +740,15 @@ async function init() {
 		} else if (action === "add-workspace") {
 			wsAddOption.click();
 		} else if (action === "toggle-terminal-list") {
-			terminalPanel.toggle();
+			if (terminalPanel.isVisible() && activeSurface === "terminal-list") {
+				terminalPanel.setVisible(false);
+			} else {
+				if (!terminalPanel.isVisible()) {
+					terminalPanel.setVisible(true);
+				}
+				terminalListWebview.webview.focus();
+				focusSurface("terminal-list");
+			}
 		} else if (action === "new-tile") {
 			const rect = canvasEl.getBoundingClientRect();
 			const size = defaultSize("term");
@@ -958,6 +972,7 @@ async function init() {
 						cwd: disc?.meta?.cwd || "~",
 						foreground: null,
 						tileId: tile.id,
+						label: tile.label || null,
 					});
 				}
 			}
@@ -991,6 +1006,20 @@ async function init() {
 						break;
 					}
 				}
+			} else if (event.channel === "terminal-list:focus-tile") {
+				const sessionId = event.args[0];
+				for (const [id] of tileManager.getTileDOMs()) {
+					const tile = getTile(id);
+					if (tile?.type === "term" && tile.ptySessionId === sessionId) {
+						tileManager.focusCanvasTile(id);
+						break;
+					}
+				}
+			} else if (event.channel === "terminal-list:blur") {
+				focusSurface("canvas");
+			} else if (event.channel === "terminal-list:rename") {
+				const { sessionId, label } = event.args[0];
+				tileManager.updateTerminalLabel(sessionId, label);
 			}
 		},
 	);

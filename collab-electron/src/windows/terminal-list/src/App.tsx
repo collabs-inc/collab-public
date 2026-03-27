@@ -7,6 +7,7 @@ interface TerminalEntry {
   cwd: string;
   foreground: string | null;
   tileId: string;
+  label: string | null;
 }
 
 function shellBasename(shell: string): string {
@@ -23,6 +24,32 @@ function App() {
   const [entries, setEntries] = useState<TerminalEntry[]>([]);
   const [focusedSessionId, setFocusedSessionId] =
     useState<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+
+  function startRename(entry: TerminalEntry) {
+    setEditingSessionId(entry.sessionId);
+    setEditValue(entry.label || shellBasename(entry.shell));
+  }
+
+  function commitRename(sessionId: string) {
+    const trimmed = editValue.trim();
+    const entry = entries.find((e) => e.sessionId === sessionId);
+    const shellName = entry ? shellBasename(entry.shell) : "";
+    const label = trimmed && trimmed !== shellName ? trimmed : null;
+    setEntries((prev) =>
+      prev.map((e) =>
+        e.sessionId === sessionId ? { ...e, label } : e,
+      ),
+    );
+    setEditingSessionId(null);
+    window.api.sendToHost("terminal-list:rename", { sessionId, label });
+  }
+
+  function cancelRename() {
+    setEditingSessionId(null);
+  }
+
   useEffect(() => {
     // Listen for messages from the shell renderer via webview.send()
     // These arrive on ipcRenderer.on() in the universal preload,
@@ -72,8 +99,26 @@ function App() {
     window.api.sendToHost("terminal-list:peek-tile", sessionId);
   }
 
+  function focusTile(sessionId: string) {
+    window.api.sendToHost("terminal-list:focus-tile", sessionId);
+  }
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if (editingSessionId) return;
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        window.api.sendToHost("terminal-list:blur");
+        return;
+      }
+
+      if (e.key === "Enter" && focusedSessionId) {
+        e.preventDefault();
+        focusTile(focusedSessionId);
+        return;
+      }
+
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
       if (entries.length === 0) return;
 
@@ -93,7 +138,7 @@ function App() {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [entries, focusedSessionId]);
+  }, [entries, focusedSessionId, editingSessionId]);
 
   return (
     <div className="terminal-list">
@@ -110,6 +155,9 @@ function App() {
           .filter(Boolean)
           .join(" ");
 
+        const isEditing = editingSessionId === entry.sessionId;
+        const displayName = entry.label || shellBasename(entry.shell);
+
         return (
           <div
             key={entry.sessionId}
@@ -119,9 +167,30 @@ function App() {
             <div className={`status-dot ${stateClass}`} />
             <div className="entry-info">
               <div className="entry-top">
-                <span className="shell-name">
-                  {shellBasename(entry.shell)}
-                </span>
+                {isEditing ? (
+                  <input
+                    className="rename-input"
+                    value={editValue}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitRename(entry.sessionId);
+                      if (e.key === "Escape") cancelRename();
+                    }}
+                    onBlur={() => commitRename(entry.sessionId)}
+                  />
+                ) : (
+                  <span
+                    className="shell-name"
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      startRename(entry);
+                    }}
+                  >
+                    {displayName}
+                  </span>
+                )}
                 <span className="status-label">
                   {idle
                     ? "idle"

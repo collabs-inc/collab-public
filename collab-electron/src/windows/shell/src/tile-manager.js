@@ -58,6 +58,7 @@ export function createTileManager({
 				folderPath: t.folderPath,
 				workspacePath: t.workspacePath,
 				ptySessionId: t.ptySessionId,
+				label: t.label,
 				url: t.url,
 				zIndex: t.zIndex,
 			})),
@@ -619,6 +620,7 @@ export function createTileManager({
 						height: saved.height,
 						zIndex: saved.zIndex,
 						ptySessionId: saved.ptySessionId,
+						label: saved.label,
 					},
 				);
 				spawnTerminalWebview(tile);
@@ -654,6 +656,18 @@ export function createTileManager({
 	}
 
 	// -- Tile updates for external events --
+
+	function updateTerminalLabel(sessionId, label) {
+		for (const t of tiles) {
+			if (t.type === "term" && t.ptySessionId === sessionId) {
+				t.label = label || undefined;
+				const dom = tileDOMs.get(t.id);
+				if (dom) updateTileTitle(dom, t);
+				saveCanvasDebounced();
+				return;
+			}
+		}
+	}
 
 	function updateTileForRename(oldPath, newPath) {
 		let anyUpdated = false;
@@ -727,6 +741,7 @@ export function createTileManager({
 		getTileDOMs: () => tileDOMs,
 		getFocusedTileId: () => focusedTileId,
 		setFocusedTileId: (id) => { focusedTileId = id; },
+		updateTerminalLabel,
 		updateTileForRename,
 		closeTilesForDeletedPaths,
 		broadcastToTileWebviews,
