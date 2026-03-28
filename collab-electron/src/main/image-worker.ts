@@ -27,9 +27,11 @@ interface Response {
 
 const NATIVE_FORMATS = new Set(["png", "jpeg", "gif", "webp"]);
 const MAX_CACHE = 500;
+const MAX_TOTAL_SIZE = 10_000_000;
 
 const cacheDir: string | null = workerData?.cacheDir ?? null;
 const memCache = new Map<string, string>();
+let totalSize = 0;
 
 if (cacheDir) {
   mkdirSync(cacheDir, { recursive: true });
@@ -43,9 +45,10 @@ function hashKey(path: string, size: number): string {
 }
 
 function evictIfNeeded(): void {
-  if (memCache.size <= MAX_CACHE) return;
-  const firstKey = memCache.keys().next().value;
-  if (firstKey !== undefined) {
+  while (totalSize > MAX_TOTAL_SIZE || memCache.size > MAX_CACHE) {
+    const firstKey = memCache.keys().next().value;
+    if (firstKey === undefined) break;
+    totalSize -= memCache.get(firstKey)?.length ?? 0;
     memCache.delete(firstKey);
   }
 }
@@ -113,6 +116,9 @@ async function thumbnail(
 
   const diskHit = readDiskCache(hash, mtimeMs);
   if (diskHit) {
+    const oldVal = memCache.get(memKey);
+    if (oldVal) totalSize -= oldVal.length;
+    totalSize += diskHit.length;
     evictIfNeeded();
     memCache.set(memKey, diskHit);
     return diskHit;
@@ -126,6 +132,9 @@ async function thumbnail(
   const dataUrl = `data:image/png;base64,${buf.toString("base64")}`;
 
   writeDiskCache(hash, mtimeMs, buf);
+  const oldVal = memCache.get(memKey);
+  if (oldVal) totalSize -= oldVal.length;
+  totalSize += dataUrl.length;
   evictIfNeeded();
   memCache.set(memKey, dataUrl);
 
@@ -161,6 +170,7 @@ function invalidate(paths: string[]): void {
   for (const path of paths) {
     for (const key of memCache.keys()) {
       if (key.startsWith(`${path}\0`)) {
+        totalSize -= memCache.get(key)?.length ?? 0;
         memCache.delete(key);
         const size = Number(key.split("\0")[1]);
         if (size) hashes.add(hashKey(path, size));
