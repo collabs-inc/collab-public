@@ -455,6 +455,7 @@ export function WorkspaceGraph({
 						width={dimensions.width}
 						height={dimensions.height}
 						darkMode={isDark}
+						hidden={hidden}
 						nodeFill={nodeFill}
 						nodeStroke={nodeStroke}
 						nodeStrokeWidth={nodeStrokeWidthFn}
