@@ -61,7 +61,7 @@ export function WorkspaceGraph({
 		let timeout: ReturnType<typeof setTimeout>;
 		const unsub = window.api.onFsChanged(() => {
 			clearTimeout(timeout);
-			timeout = setTimeout(fetchGraph, 16);
+			timeout = setTimeout(fetchGraph, 300);
 		});
 		return () => {
 			clearTimeout(timeout);
