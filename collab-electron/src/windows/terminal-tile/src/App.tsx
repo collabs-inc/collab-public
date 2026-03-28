@@ -23,6 +23,13 @@ function App() {
     useState<string | null>(null);
   const [sessionMode, setSessionMode] =
     useState<"tmux" | "sidecar" | undefined>(undefined);
+  const [cursorBlink, setCursorBlink] = useState(true);
+
+  useEffect(() => {
+    window.api.getPref("cursorBlink").then((val) => {
+      if (typeof val === "boolean") setCursorBlink(val);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(
@@ -133,6 +140,7 @@ function App() {
       restored={restored}
       scrollbackData={scrollbackData}
       mode={sessionMode}
+      cursorBlink={cursorBlink}
     />
   );
 }
