@@ -1062,6 +1062,12 @@ async function init() {
 	// -- Update pill --
 
 	let updateState = { status: "idle" };
+	const toastedVersions = new Set();
+	const updateToast = document.getElementById("update-toast");
+	const updateToastText = document.getElementById("update-toast-text");
+	const updateToastAction = document.getElementById("update-toast-action");
+	const updateToastDismiss = document.getElementById("update-toast-dismiss");
+	let toastAutoHideTimer = null;
 	const isDevMode = import.meta.env.DEV;
 
 	function renderUpdatePill() {
@@ -1116,6 +1122,64 @@ async function init() {
 		}
 	}
 
+	function hideUpdateToast() {
+		updateToast.classList.remove("visible");
+		updateToast.style.display = "none";
+		if (toastAutoHideTimer) {
+			clearTimeout(toastAutoHideTimer);
+			toastAutoHideTimer = null;
+		}
+	}
+
+	function showToast(text, actionLabel, actionFn, autoHideMs) {
+		updateToastText.textContent = text;
+		updateToastAction.textContent = actionLabel;
+		updateToastAction.onclick = () => {
+			hideUpdateToast();
+			actionFn();
+		};
+		updateToast.style.display = "flex";
+
+		requestAnimationFrame(() => {
+			updateToast.classList.add("visible");
+		});
+
+		if (toastAutoHideTimer) clearTimeout(toastAutoHideTimer);
+		toastAutoHideTimer = setTimeout(hideUpdateToast, autoHideMs);
+	}
+
+	function renderUpdateToast(state) {
+		if (state.status === "error" && state.error) {
+			showToast(
+				"Download failed",
+				"Retry",
+				() => window.shellApi.updateCheck(),
+				10000,
+			);
+			return;
+		}
+
+		if (state.status !== "available") return;
+		if (!state.version) return;
+		if (toastedVersions.has(state.version)) return;
+
+		const settingsOverlay = document.getElementById("settings-overlay");
+		if (settingsOverlay && settingsOverlay.classList.contains("visible")) return;
+
+		toastedVersions.add(state.version);
+
+		showToast(
+			`Update available: v${state.version}`,
+			"Download",
+			() => window.shellApi.updateDownload(),
+			15000,
+		);
+	}
+
+	updateToastDismiss.addEventListener("click", () => {
+		hideUpdateToast();
+	});
+
 	window.shellApi.updateGetStatus().then((s) => {
 		updateState = s;
 		renderUpdatePill();
@@ -1124,6 +1188,8 @@ async function init() {
 	window.shellApi.onUpdateStatus((s) => {
 		updateState = s;
 		renderUpdatePill();
+		try { renderUpdateToast(s); } catch (e) { console.warn("Toast render error:", e); }
+		singletonWebviews.settings?.send("update:status", s);
 	});
 
 	settingsBtn.addEventListener("click", () => {
