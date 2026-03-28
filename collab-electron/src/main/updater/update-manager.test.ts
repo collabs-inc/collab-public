@@ -211,4 +211,37 @@ describe("UpdateManager", () => {
     await updateManager.checkForUpdates();
     expect(getState().status).toBe("checking");
   });
+
+  test("normalizes array release notes to markdown string", async () => {
+    await updateManager.checkForUpdates();
+    fireEvent("update-available", {
+      version: "2.0.0",
+      releaseNotes: [
+        { version: "1.1.0", note: "Bug fixes" },
+        { version: "1.2.0", note: "New feature" },
+      ],
+    });
+    expect(getState().status).toBe("available");
+    expect(getState().releaseNotes).toBe(
+      "## 1.1.0\nBug fixes\n\n## 1.2.0\nNew feature"
+    );
+  });
+
+  test("preserves string release notes unchanged", async () => {
+    await updateManager.checkForUpdates();
+    fireEvent("update-available", {
+      version: "2.0.0",
+      releaseNotes: "Simple string notes",
+    });
+    expect(getState().releaseNotes).toBe("Simple string notes");
+  });
+
+  test("handles undefined release notes gracefully", async () => {
+    await updateManager.checkForUpdates();
+    fireEvent("update-available", {
+      version: "2.0.0",
+      releaseNotes: undefined,
+    });
+    expect(getState().releaseNotes).toBeUndefined();
+  });
 });
