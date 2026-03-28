@@ -96,16 +96,24 @@ export function registerIpcHandlers(config: AppConfig): void {
     forwardToWebview("nav", "fs-changed", batch);
     forwardToWebview("viewer", "fs-changed", batch);
 
-    // Wikilink reindex (batched)
+    // Batched: wikilink reindex
+    const mdDeleted: string[] = [];
+    const mdUpdated: string[] = [];
     for (const event of batch) {
       for (const change of event.changes) {
         if (!change.path.endsWith(".md")) continue;
         if (change.type === FS_CHANGE_DELETED) {
-          wikilinkIndex.removeFile(change.path);
+          mdDeleted.push(change.path);
         } else {
-          void wikilinkIndex.updateFile(change.path);
+          mdUpdated.push(change.path);
         }
       }
+    }
+    for (const p of mdDeleted) {
+      wikilinkIndex.removeFile(p);
+    }
+    if (mdUpdated.length > 0) {
+      void wikilinkIndex.batchUpdate(mdUpdated);
     }
 
     // Deletion handling (batched)

@@ -18,6 +18,10 @@ const index: FilenameIndex = {
 
 const suppressedPaths = new Set<string>();
 
+const pendingUpdates = new Set<string>();
+const recentlyDeleted = new Set<string>();
+let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
 export function suppressNextUpdate(path: string): void {
   suppressedPaths.add(path);
 }
@@ -170,8 +174,37 @@ export async function updateFile(
 
 export function removeFile(filePath: string): void {
   if (suppressedPaths.delete(filePath)) return;
+  recentlyDeleted.add(filePath);
+  pendingUpdates.delete(filePath);
   removeFromStemIndex(filePath);
   updateLinkMaps(filePath, []);
+}
+
+export async function batchUpdate(paths: string[]): Promise<void> {
+  for (const p of paths) pendingUpdates.add(p);
+
+  if (batchTimer) clearTimeout(batchTimer);
+  batchTimer = setTimeout(() => flushUpdates(), 500);
+}
+
+async function flushUpdates(): Promise<void> {
+  const paths = Array.from(pendingUpdates).filter(p => !recentlyDeleted.has(p));
+  pendingUpdates.clear();
+  recentlyDeleted.clear();
+  batchTimer = null;
+
+  for (let i = 0; i < paths.length; i += 20) {
+    const chunk = paths.slice(i, i + 20);
+    const results = await Promise.allSettled(
+      chunk.map(p => updateFile(p))
+    );
+
+    for (let j = 0; j < results.length; j++) {
+      if (results[j].status === "rejected") {
+        console.warn(`Wikilink index update failed for ${chunk[j]}:`, (results[j] as PromiseRejectedResult).reason);
+      }
+    }
+  }
 }
 
 export function resolve(
