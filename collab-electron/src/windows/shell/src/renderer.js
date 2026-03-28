@@ -1180,6 +1180,44 @@ async function init() {
 		hideUpdateToast();
 	});
 
+	// -- Release notes tooltip --
+
+	const releaseNotesTooltip = (() => {
+		let el = document.getElementById("release-notes-tooltip");
+		if (!el) {
+			el = document.createElement("div");
+			el.id = "release-notes-tooltip";
+			document.body.appendChild(el);
+		}
+		return el;
+	})();
+
+	function showReleaseNotesTooltip() {
+		if (
+			updateState.status !== "available" &&
+			updateState.status !== "ready"
+		) return;
+		if (!updateState.releaseNotes) return;
+
+		releaseNotesTooltip.textContent = updateState.releaseNotes;
+		const rect = updatePill.getBoundingClientRect();
+		releaseNotesTooltip.style.top = (rect.bottom + 4) + "px";
+		releaseNotesTooltip.style.right = (window.innerWidth - rect.right) + "px";
+		releaseNotesTooltip.style.left = "";
+		releaseNotesTooltip.classList.add("visible");
+
+		updatePill.removeAttribute("title");
+	}
+
+	function hideReleaseNotesTooltip() {
+		releaseNotesTooltip.classList.remove("visible");
+	}
+
+	updatePill.addEventListener("mouseenter", showReleaseNotesTooltip);
+	updatePill.addEventListener("mouseleave", hideReleaseNotesTooltip);
+	window.addEventListener("scroll", hideReleaseNotesTooltip, true);
+	window.addEventListener("resize", hideReleaseNotesTooltip);
+
 	window.shellApi.updateGetStatus().then((s) => {
 		updateState = s;
 		renderUpdatePill();
