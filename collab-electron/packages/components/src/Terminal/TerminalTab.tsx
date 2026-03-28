@@ -20,9 +20,10 @@ interface TerminalTabProps {
 	scrollbackData?: string | null;
 	mode?: "tmux" | "sidecar";
 	cursorBlink?: boolean;
+	scrollback?: number;
 }
 
-function TerminalTab({ sessionId, visible, restored, scrollbackData, mode, cursorBlink = true }: TerminalTabProps) {
+function TerminalTab({ sessionId, visible, restored, scrollbackData, mode, cursorBlink = true, scrollback = 200000 }: TerminalTabProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const fitRef = useRef<FitAddon | null>(null);
 
@@ -36,7 +37,7 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode, curso
 			fontWeight: "300",
 			fontWeightBold: "500",
 			cursorBlink,
-			scrollback: 200000,
+			scrollback,
 			allowProposedApi: true,
 		});
 

@@ -24,10 +24,14 @@ function App() {
   const [sessionMode, setSessionMode] =
     useState<"tmux" | "sidecar" | undefined>(undefined);
   const [cursorBlink, setCursorBlink] = useState(true);
+  const [scrollback, setScrollback] = useState(200000);
 
   useEffect(() => {
     window.api.getPref("cursorBlink").then((val) => {
       if (typeof val === "boolean") setCursorBlink(val);
+    }).catch(() => {});
+    window.api.getPref("scrollback").then((val) => {
+      if (typeof val === "number" && val >= 1000 && val <= 200000) setScrollback(val);
     }).catch(() => {});
   }, []);
 
@@ -141,6 +145,7 @@ function App() {
       scrollbackData={scrollbackData}
       mode={sessionMode}
       cursorBlink={cursorBlink}
+      scrollback={scrollback}
     />
   );
 }
