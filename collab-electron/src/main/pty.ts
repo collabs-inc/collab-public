@@ -150,6 +150,7 @@ export async function ensureSidecar(): Promise<void> {
           sessionId: string;
           exitCode: number;
         };
+        cleanupForegroundSession(sessionId);
         dataSockets.get(sessionId)?.destroy();
         dataSockets.delete(sessionId);
         deleteSessionMeta(sessionId);
@@ -242,6 +243,7 @@ function attachClient(
 
   disposables.push(
     ptyProcess.onExit(() => {
+      cleanupForegroundSession(sessionId);
       if (shuttingDown) {
         sessions.delete(sessionId);
         return;
@@ -546,6 +548,7 @@ export function listSessions(): string[] {
 
 export function killAll(): void {
   shuttingDown = true;
+  cleanupAllForegroundSessions();
   for (const [, sock] of dataSockets) {
     sock.destroy();
   }
@@ -562,6 +565,7 @@ const KILL_ALL_TIMEOUT_MS = 2000;
 
 export function killAllAndWait(): Promise<void> {
   shuttingDown = true;
+  cleanupAllForegroundSessions();
   if (sessions.size === 0) return Promise.resolve();
 
   const pending: Promise<void>[] = [];
@@ -718,7 +722,8 @@ export async function getForegroundProcess(
 }
 
 const lastForeground = new Map<string, string>();
-const statusTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const lastDataTime = new Map<string, number>();
+const fgTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const STATUS_DEBOUNCE_MS = 500;
 
 function sendToMainWindow(channel: string, payload: unknown): void {
@@ -731,37 +736,52 @@ function sendToMainWindow(channel: string, payload: unknown): void {
   }
 }
 
+function doForegroundCheck(sessionId: string): void {
+  getForegroundProcess(sessionId).then((fg) => {
+    if (fg == null) return;
+    const prev = lastForeground.get(sessionId);
+    if (fg === prev) return;
+    lastForeground.set(sessionId, fg);
+    sendToMainWindow("pty:status-changed", {
+      sessionId,
+      foreground: fg,
+    });
+  });
+}
+
 export function scheduleForegroundCheck(sessionId: string): void {
-  const existing = statusTimers.get(sessionId);
-  if (existing) clearTimeout(existing);
+  lastDataTime.set(sessionId, Date.now());
+  if (fgTimers.has(sessionId)) return;
 
-  statusTimers.set(
-    sessionId,
-    setTimeout(() => {
-      statusTimers.delete(sessionId);
-      getForegroundProcess(sessionId).then((fg) => {
-        if (fg == null) return;
+  fgTimers.set(sessionId, setTimeout(function check() {
+    const last = lastDataTime.get(sessionId) ?? 0;
+    const elapsed = Date.now() - last;
+    if (elapsed >= STATUS_DEBOUNCE_MS) {
+      fgTimers.delete(sessionId);
+      lastDataTime.delete(sessionId);
+      doForegroundCheck(sessionId);
+    } else {
+      fgTimers.set(sessionId, setTimeout(check, STATUS_DEBOUNCE_MS - elapsed));
+    }
+  }, STATUS_DEBOUNCE_MS));
+}
 
-        const prev = lastForeground.get(sessionId);
-        if (fg === prev) return;
+function cleanupForegroundSession(sessionId: string): void {
+  lastForeground.delete(sessionId);
+  lastDataTime.delete(sessionId);
+  const timer = fgTimers.get(sessionId);
+  if (timer) { clearTimeout(timer); fgTimers.delete(sessionId); }
+}
 
-        lastForeground.set(sessionId, fg);
-        sendToMainWindow("pty:status-changed", {
-          sessionId,
-          foreground: fg,
-        });
-      });
-    }, STATUS_DEBOUNCE_MS),
-  );
+function cleanupAllForegroundSessions(): void {
+  for (const timer of fgTimers.values()) clearTimeout(timer);
+  fgTimers.clear();
+  lastDataTime.clear();
+  lastForeground.clear();
 }
 
 export function clearForegroundCache(sessionId: string): void {
-  lastForeground.delete(sessionId);
-  const timer = statusTimers.get(sessionId);
-  if (timer) {
-    clearTimeout(timer);
-    statusTimers.delete(sessionId);
-  }
+  cleanupForegroundSession(sessionId);
 }
 
 function getAttachedSessionNames(): Set<string> {
