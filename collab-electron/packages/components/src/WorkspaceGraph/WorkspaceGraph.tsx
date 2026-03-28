@@ -131,7 +131,7 @@ export function WorkspaceGraph({
 
 	useEffect(() => {
 		if (agentSessions.size === 0) return;
-		const interval = setInterval(() => setTick((t) => t + 1), 1000);
+		const interval = setInterval(() => setTick((t) => t + 1), 3000);
 		return () => clearInterval(interval);
 	}, [agentSessions.size]);
 
