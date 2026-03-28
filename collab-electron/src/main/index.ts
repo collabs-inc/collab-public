@@ -441,7 +441,7 @@ function createWindow(): void {
     minHeight: 400,
     titleBarStyle: "hidden",
     vibrancy: "under-window",
-    visualEffectState: "active",
+    visualEffectState: "followWindow",
     trafficLightPosition: { x: 14, y: 12 },
     webPreferences: {
       preload: getPreloadPath("shell"),
