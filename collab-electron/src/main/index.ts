@@ -536,14 +536,24 @@ ipcMain.handle(
 
 ipcMain.handle("fonts:list-mono", () =>
   new Promise<string[]>((resolve) => {
+    const jxa = `
+ObjC.import("AppKit");
+var families = $.NSFontManager.sharedFontManager.availableFontFamilies;
+var mono = [];
+for (var i = 0; i < families.count; i++) {
+  var name = families.objectAtIndex(i).js;
+  var font = $.NSFont.fontWithNameSize(name, 12);
+  if (font && font.isFixedPitch) mono.push(name);
+}
+mono.join("\\n");
+`.trim();
+
     execFile(
-      "fc-list",
-      ["--format=%{family[0]}\\n", ":spacing=mono"],
+      "osascript",
+      ["-l", "JavaScript", "-e", jxa],
       { encoding: "utf-8", timeout: 5000 },
       (err, stdout) => {
         if (err) {
-          // fc-list requires fontconfig — not available on stock macOS.
-          // Return empty so the UI falls back to "Default (Menlo)".
           resolve([]);
           return;
         }
