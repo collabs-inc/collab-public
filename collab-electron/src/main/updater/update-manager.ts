@@ -49,10 +49,14 @@ class UpdateManager {
     });
 
     autoUpdater.on("update-available", (info) => {
-      const releaseNotes =
-        typeof info.releaseNotes === "string"
-          ? info.releaseNotes
-          : undefined;
+      let releaseNotes: string | undefined;
+      if (typeof info.releaseNotes === "string") {
+        releaseNotes = info.releaseNotes;
+      } else if (Array.isArray(info.releaseNotes)) {
+        releaseNotes = info.releaseNotes
+          .map((rn: { version: string; note: string }) => `## ${rn.version}\n${rn.note}`)
+          .join("\n\n");
+      }
       this.setState({
         status: "available",
         version: info.version,
@@ -73,10 +77,14 @@ class UpdateManager {
     });
 
     autoUpdater.on("update-downloaded", (info) => {
-      const releaseNotes =
-        typeof info.releaseNotes === "string"
-          ? info.releaseNotes
-          : undefined;
+      let releaseNotes: string | undefined;
+      if (typeof info.releaseNotes === "string") {
+        releaseNotes = info.releaseNotes;
+      } else if (Array.isArray(info.releaseNotes)) {
+        releaseNotes = info.releaseNotes
+          .map((rn: { version: string; note: string }) => `## ${rn.version}\n${rn.note}`)
+          .join("\n\n");
+      }
       this.setState({
         status: "ready",
         version: info.version,
