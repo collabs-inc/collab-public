@@ -308,10 +308,30 @@ export function useFileTree(
 	}, [loadDir]);
 
 	useEffect(() => {
-		return window.api.onFileRenamed(() => {
-			for (const dirPath of dirContentsRef.current.keys()) {
-				loadDir(dirPath);
-			}
+		return window.api.onFileRenamed((oldPath: string, newPath: string) => {
+			const dirs = new Set<string>();
+
+			const oldParent = oldPath.substring(0, oldPath.lastIndexOf('/'));
+			if (dirContentsRef.current.has(oldParent)) dirs.add(oldParent);
+
+			const newParent = newPath.substring(0, newPath.lastIndexOf('/'));
+			if (dirContentsRef.current.has(newParent)) dirs.add(newParent);
+
+			// Edge case: folder rename — invalidate stale child entries
+			const oldPrefix = oldPath + '/';
+			setDirContents(prev => {
+				const next = new Map(prev);
+				let changed = false;
+				for (const dirPath of next.keys()) {
+					if (dirPath.startsWith(oldPrefix)) {
+						next.delete(dirPath);
+						changed = true;
+					}
+				}
+				return changed ? next : prev;
+			});
+
+			for (const dirPath of dirs) loadDir(dirPath);
 		});
 	}, [loadDir]);
 

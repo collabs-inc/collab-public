@@ -345,7 +345,7 @@ export function createForceGraph(
 
 	const simulation = d3
 		.forceSimulation<ForceNode>(forceNodes)
-		.alphaDecay(0.002)
+		.alphaDecay(0.01)
 		.force("link", linkForce)
 		.force("charge", nodeForce)
 		.on("tick", ticked);

@@ -11,6 +11,7 @@ interface ForceDirectedGraphProps {
 	width: number;
 	height: number;
 	darkMode?: boolean;
+	hidden?: boolean;
 	nodeFill: (node: GraphNode) => string;
 	nodeStroke?: (node: GraphNode, index: number) => string;
 	nodeStrokeWidth?: (node: GraphNode, index: number) => number;
@@ -39,7 +40,7 @@ function getThemeOptions(isDark: boolean): ForceGraphThemeOptions {
 export const ForceDirectedGraph = forwardRef<
 	ForceDirectedGraphRef,
 	ForceDirectedGraphProps
->(({ data, width, height, darkMode, nodeFill, nodeStroke, nodeStrokeWidth, nodeRadius, linkStroke, linkStrokeDasharray, linkOpacity, linkStrength, onNodeClick }, ref) => {
+>(({ data, width, height, darkMode, hidden, nodeFill, nodeStroke, nodeStrokeWidth, nodeRadius, linkStroke, linkStrokeDasharray, linkOpacity, linkStrength, onNodeClick }, ref) => {
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const graphRef = useRef<ForceGraphHandle | null>(null);
 	const onNodeClickRef = useRef(onNodeClick);
@@ -112,6 +113,16 @@ export const ForceDirectedGraph = forwardRef<
 			graphRef.current = null;
 		};
 	}, []);
+
+	useEffect(() => {
+		if (!graphRef.current) return;
+		const sim = graphRef.current.simulation;
+		if (hidden) {
+			sim.stop();
+		} else {
+			sim.alpha(0.3).restart();
+		}
+	}, [hidden]);
 
 	useEffect(() => {
 		const theme = getThemeOptions(!!darkMode);

@@ -23,6 +23,8 @@ function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [cursorBlink, setCursorBlink] = useState(true);
+  const [scrollback, setScrollback] = useState(200000);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const activeIdRef = useRef(activeId);
@@ -115,6 +117,15 @@ function App() {
   useEffect(() => {
     if (activeId) pendingTab.current = null;
   }, [activeId]);
+
+  useEffect(() => {
+    window.api.getPref("cursorBlink").then((val) => {
+      if (typeof val === "boolean") setCursorBlink(val);
+    }).catch(() => {});
+    window.api.getPref("scrollback").then((val) => {
+      if (typeof val === "number" && val >= 1000 && val <= 200000) setScrollback(val);
+    }).catch(() => {});
+  }, []);
 
   const didInit = useRef(false);
   useEffect(() => {
@@ -283,6 +294,8 @@ function App() {
             key={s.id}
             sessionId={s.id}
             visible={s.id === activeId}
+            cursorBlink={cursorBlink}
+            scrollback={scrollback}
           />
         ))}
       </div>

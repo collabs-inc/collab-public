@@ -185,6 +185,15 @@ export function createFileFilter(): FileFilter {
   const ig = ignore().add(DEFAULT_PATTERNS);
   const binaryCache = new Map<string, Promise<boolean>>();
 
+  function evictBinaryCacheIfNeeded(): void {
+    if (binaryCache.size <= 5000) return;
+    const iter = binaryCache.keys();
+    for (let i = 0; i < 1000; i++) {
+      const key = iter.next().value;
+      if (key !== undefined) binaryCache.delete(key);
+    }
+  }
+
   return {
     isIgnored: (relativePath: string) => ig.ignores(relativePath),
     isBinaryFile: (fullPath: string) => {
@@ -192,6 +201,7 @@ export function createFileFilter(): FileFilter {
       if (!cached) {
         cached = detectBinaryFile(fullPath);
         binaryCache.set(fullPath, cached);
+        evictBinaryCacheIfNeeded();
       }
       return cached;
     },

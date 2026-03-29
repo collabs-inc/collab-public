@@ -83,6 +83,10 @@ export function fileTouched(params: {
     timestamp,
   });
 
+  if (session.interactions.length > 1000) {
+    session.interactions = session.interactions.slice(-1000);
+  }
+
   notifyFn?.({
     kind: "file-touched",
     sessionId: params.session_id,

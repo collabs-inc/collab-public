@@ -42,8 +42,20 @@ function sendToShell(
 export function registerCanvasRpc(win: BrowserWindow): void {
   shellWindow = win;
 
+  const rpcChannel = "canvas:rpc-response";
+
+  win.on("closed", () => {
+    for (const [, entry] of pending) {
+      clearTimeout(entry.timer);
+      entry.reject(new Error("Shell window closed"));
+    }
+    pending.clear();
+    shellWindow = null;
+    ipcMain.removeAllListeners(rpcChannel);
+  });
+
   ipcMain.on(
-    "canvas:rpc-response",
+    rpcChannel,
     (_event, response: {
       requestId: string;
       result?: unknown;

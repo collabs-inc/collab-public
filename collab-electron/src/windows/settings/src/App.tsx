@@ -323,6 +323,8 @@ const TERMINAL_MODES: {
 
 function TerminalPane() {
   const [mode, setMode] = useState<TerminalMode>("sidecar");
+  const [cursorBlink, setCursorBlink] = useState(true);
+  const [scrollback, setScrollback] = useState(200000);
 
   useEffect(() => {
     api.getPref("terminalMode")
@@ -330,11 +332,32 @@ function TerminalPane() {
         if (v === "tmux" || v === "sidecar") setMode(v);
       })
       .catch(() => { });
+    api.getPref("cursorBlink")
+      .then((v) => {
+        if (typeof v === "boolean") setCursorBlink(v);
+      })
+      .catch(() => { });
+    api.getPref("scrollback")
+      .then((v) => {
+        if (typeof v === "number" && v >= 1000 && v <= 200000) setScrollback(v);
+      })
+      .catch(() => { });
   }, []);
 
   async function handleModeChange(value: TerminalMode) {
     setMode(value);
     await api.setPref("terminalMode", value);
+  }
+
+  async function handleCursorBlinkChange(value: boolean) {
+    setCursorBlink(value);
+    await api.setPref("cursorBlink", value);
+  }
+
+  async function handleScrollbackChange(value: number) {
+    const clamped = Math.max(1000, Math.min(200000, value));
+    setScrollback(clamped);
+    await api.setPref("scrollback", clamped);
   }
 
   return (
@@ -393,6 +416,50 @@ function TerminalPane() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">Cursor blink</p>
+          <p className="text-xs text-muted-foreground">Applies to new terminals</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={cursorBlink}
+          onClick={() => { void handleCursorBlinkChange(!cursorBlink); }}
+          className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200"
+          style={{
+            backgroundColor: cursorBlink ? "var(--foreground)" : "color-mix(in srgb, var(--foreground) 20%, transparent)",
+          }}
+        >
+          <span
+            className="pointer-events-none inline-block h-4 w-4 rounded-full shadow-sm transition-transform duration-200"
+            style={{
+              backgroundColor: "var(--background)",
+              transform: cursorBlink ? "translate(17px, 2px)" : "translate(2px, 2px)",
+            }}
+          />
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">Scrollback lines</p>
+            <p className="text-xs text-muted-foreground">Applies to new terminals</p>
+          </div>
+          <span className="text-xs tabular-nums text-muted-foreground">{scrollback.toLocaleString()}</span>
+        </div>
+        <input
+          type="range"
+          min={1000}
+          max={200000}
+          step={1000}
+          value={scrollback}
+          onChange={(e) => { void handleScrollbackChange(Number(e.target.value)); }}
+          className="w-full"
+        />
       </div>
     </div>
   );
