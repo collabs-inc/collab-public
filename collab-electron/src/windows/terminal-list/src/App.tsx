@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { normalizeCommandName } from "@collab/shared/path-utils";
 import "./App.css";
 
@@ -9,6 +9,7 @@ interface TerminalEntry {
   cwd: string;
   foreground: string | null;
   tileId: string;
+  customName?: string | null;
 }
 
 function isIdle(entry: TerminalEntry): boolean {
@@ -47,6 +48,24 @@ function App() {
   const [entries, setEntries] = useState<TerminalEntry[]>([]);
   const [focusedSessionId, setFocusedSessionId] =
     useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const lastClickRef = useRef<{ id: string; time: number } | null>(null);
+
+  function startEditing(entry: TerminalEntry) {
+    setEditingId(entry.sessionId);
+    setEditValue(entry.customName || entry.displayName || "");
+  }
+
+  function commitRename(sessionId: string) {
+    const trimmed = editValue.trim();
+    window.api.sendToHost("terminal-list:rename", { sessionId, name: trimmed });
+    setEditingId(null);
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+  }
   useEffect(() => {
     // Listen for messages from the shell renderer via webview.send()
     // These arrive on ipcRenderer.on() in the universal preload,
@@ -81,6 +100,15 @@ function App() {
             prev.map((e) =>
               e.sessionId === payload.sessionId
                 ? { ...e, foreground: payload.foreground }
+                : e,
+            ),
+          );
+        } else if (channel === "terminal-list:renamed") {
+          const payload = args[0] as { sessionId: string; name: string };
+          setEntries((prev) =>
+            prev.map((e) =>
+              e.sessionId === payload.sessionId
+                ? { ...e, customName: payload.name || null }
                 : e,
             ),
           );
@@ -139,23 +167,70 @@ function App() {
           .filter(Boolean)
           .join(" ");
 
+        const displayLabel = entry.customName || entry.displayName;
+
         return (
           <div
             key={entry.tileId}
             className={classes}
-            onClick={() => peekTile(entry.sessionId)}
+            onClick={() => {
+              const now = Date.now();
+              const last = lastClickRef.current;
+              if (
+                last &&
+                last.id === entry.sessionId &&
+                now - last.time < 400
+              ) {
+                startEditing(entry);
+                lastClickRef.current = null;
+                return;
+              }
+              lastClickRef.current = { id: entry.sessionId, time: now };
+              peekTile(entry.sessionId);
+            }}
           >
             <div className={`status-dot ${stateClass}`} />
             <div className="entry-info">
               <div className="entry-top">
-                <span className="shell-name">
-                  {entry.displayName}
-                </span>
-                <span className="status-label">
-                  {idle
-                    ? "idle"
-                    : entry.foreground || "running"}
-                </span>
+                {editingId === entry.sessionId ? (
+                  <input
+                    className="rename-input"
+                    value={editValue}
+                    autoFocus
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        commitRename(entry.sessionId);
+                      } else if (e.key === "Escape") {
+                        cancelEditing();
+                      }
+                      e.stopPropagation();
+                    }}
+                    onBlur={() => commitRename(entry.sessionId)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <>
+                    <span className="shell-name">
+                      {displayLabel}
+                    </span>
+                    <button
+                      className="rename-btn"
+                      title="Rename"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEditing(entry);
+                      }}
+                    >
+                      ✎
+                    </button>
+                    <span className="status-label">
+                      {idle
+                        ? "idle"
+                        : entry.foreground || "running"}
+                    </span>
+                  </>
+                )}
               </div>
               <div className="entry-cwd">
                 {entry.cwd}
