@@ -287,6 +287,107 @@ body.platform-win {
 	background: color-mix(in srgb, var(--destructive, #e5484d) 10%, transparent);
 }
 
+/* ── Update toast ── */
+
+#update-toast {
+	position: fixed;
+	top: 44px;
+	right: 16px;
+	z-index: 450;
+	-webkit-app-region: no-drag;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 14px;
+	border-radius: 10px;
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-mono);
+	font-size: 12px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+	transition: opacity 0.2s ease, transform 0.2s ease;
+	opacity: 0;
+	transform: translateY(-8px);
+	pointer-events: none;
+}
+
+#update-toast.visible {
+	display: flex;
+	opacity: 1;
+	transform: translateY(0);
+	pointer-events: auto;
+}
+
+#update-toast-text {
+	flex: 1;
+	white-space: nowrap;
+}
+
+#update-toast-action {
+	padding: 3px 10px;
+	border-radius: 6px;
+	border: 1.5px solid var(--primary, #1d76dc);
+	background: transparent;
+	color: var(--primary, #1d76dc);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	font-weight: 500;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: background 0.15s ease;
+}
+
+#update-toast-action:hover {
+	background: color-mix(in srgb, var(--primary, #1d76dc) 10%, transparent);
+}
+
+#update-toast-dismiss {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	border: none;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--muted);
+	font-size: 16px;
+	cursor: pointer;
+	transition: color 0.15s ease;
+}
+
+#update-toast-dismiss:hover {
+	color: var(--fg);
+}
+
+/* ── Release notes tooltip ── */
+
+#release-notes-tooltip {
+	position: fixed;
+	z-index: 102;
+	max-width: 400px;
+	max-height: 300px;
+	overflow-y: auto;
+	padding: 12px 14px;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+	pointer-events: none;
+	display: none;
+}
+
+#release-notes-tooltip.visible {
+	display: block;
+}
+
 #workspace-dropdown-row {
 	position: relative;
 	z-index: 600;

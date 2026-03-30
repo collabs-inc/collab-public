@@ -498,6 +498,8 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("update:getStatus"),
   updateCheck: () =>
     ipcRenderer.invoke("update:check"),
+  updateDownload: () =>
+    ipcRenderer.invoke("update:download"),
   updateInstall: () =>
     ipcRenderer.send("update:install"),
   onUpdateStatus: (cb: (state: unknown) => void) => {

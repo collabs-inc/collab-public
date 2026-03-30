@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ArrowsClockwise,
   GearSix,
+  Info,
   Keyboard,
   Palette,
   Sun,
@@ -10,6 +12,23 @@ import {
 } from "@phosphor-icons/react";
 
 type ThemeMode = "light" | "dark" | "system";
+
+type UpdateStatus =
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "ready"
+  | "installing"
+  | "error";
+
+interface UpdateState {
+  status: UpdateStatus;
+  progress?: number;
+  version?: string;
+  releaseNotes?: string;
+  error?: string;
+}
 
 interface SettingsApi {
   getPref: (key: string) => Promise<unknown>;
@@ -25,6 +44,11 @@ interface SettingsApi {
   installSkill: (agentId: string) => Promise<{ ok: boolean }>;
   uninstallSkill: (agentId: string) => Promise<{ ok: boolean }>;
   close: () => void;
+  updateGetStatus: () => Promise<UpdateState>;
+  updateCheck: () => Promise<UpdateState>;
+  updateDownload: () => Promise<UpdateState>;
+  updateInstall: () => void;
+  onUpdateStatus: (cb: (state: UpdateState) => void) => () => void;
 }
 
 const api = (window as unknown as { api: SettingsApi }).api;
@@ -496,7 +520,243 @@ function ControlsPane() {
   );
 }
 
-type Pane = "appearance" | "terminal" | "controls";
+function AboutPane() {
+  const [updateState, setUpdateState] = useState<UpdateState>({ status: "idle" });
+  const [appVersion, setAppVersion] = useState("");
+
+  useEffect(() => {
+    api.getAppVersion()
+      .then((v) => setAppVersion(v))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    api.updateGetStatus()
+      .then((s) => setUpdateState(s))
+      .catch(() => {});
+
+    const unsub = api.onUpdateStatus((s) => {
+      setUpdateState(s);
+    });
+    return unsub;
+  }, []);
+
+  function handleCheck() {
+    void api.updateCheck();
+  }
+
+  function handleDownload() {
+    void api.updateDownload();
+  }
+
+  function handleInstall() {
+    api.close();
+    setTimeout(() => {
+      api.updateInstall();
+    }, 300);
+  }
+
+  function renderReleaseNotes(notes: string | undefined) {
+    if (!notes) return null;
+    return (
+      <div
+        className="rounded-md p-3 text-xs leading-relaxed whitespace-pre-wrap"
+        style={{
+          backgroundColor:
+            "color-mix(in srgb, var(--foreground) 4%, transparent)",
+          maxHeight: "200px",
+          overflowY: "auto",
+        }}
+      >
+        {notes}
+      </div>
+    );
+  }
+
+  function renderStatusBlock() {
+    switch (updateState.status) {
+      case "idle":
+        return (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: "var(--accent, #22c55e)" }}
+              />
+              <p className="text-sm">You're up to date</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCheck}
+              className="rounded-md px-3 py-1.5 text-xs font-medium cursor-pointer"
+              style={{
+                border: "1px solid color-mix(in srgb, var(--foreground) 20%, transparent)",
+                backgroundColor: "transparent",
+                color: "var(--foreground)",
+              }}
+            >
+              Check for Updates
+            </button>
+          </div>
+        );
+
+      case "checking":
+        return (
+          <div className="flex items-center gap-2">
+            <ArrowsClockwise
+              className="h-4 w-4 animate-spin"
+              style={{ color: "var(--muted-foreground)" }}
+            />
+            <p className="text-sm text-muted-foreground">
+              Checking for updates...
+            </p>
+          </div>
+        );
+
+      case "available":
+        return (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">
+              Version {updateState.version} available
+            </p>
+            {renderReleaseNotes(updateState.releaseNotes)}
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="rounded-md px-3 py-1.5 text-xs font-medium cursor-pointer"
+              style={{
+                border: "1.5px solid var(--foreground)",
+                backgroundColor: "var(--foreground)",
+                color: "var(--background)",
+              }}
+            >
+              Download
+            </button>
+          </div>
+        );
+
+      case "downloading":
+        return (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Downloading... {Math.round(updateState.progress ?? 0)}%
+            </p>
+            <div
+              className="h-1.5 w-full rounded-full overflow-hidden"
+              style={{
+                backgroundColor:
+                  "color-mix(in srgb, var(--foreground) 10%, transparent)",
+              }}
+            >
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.round(updateState.progress ?? 0)}%`,
+                  backgroundColor: "var(--foreground)",
+                  opacity: 0.6,
+                }}
+              />
+            </div>
+          </div>
+        );
+
+      case "ready":
+        return (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">
+              Update downloaded — v{updateState.version}
+            </p>
+            {renderReleaseNotes(updateState.releaseNotes)}
+            <button
+              type="button"
+              onClick={handleInstall}
+              className="rounded-md px-3 py-1.5 text-xs font-medium cursor-pointer"
+              style={{
+                border: "1.5px solid var(--foreground)",
+                backgroundColor: "var(--foreground)",
+                color: "var(--background)",
+              }}
+            >
+              Restart &amp; Update
+            </button>
+          </div>
+        );
+
+      case "installing":
+        return (
+          <div className="flex items-center gap-2">
+            <ArrowsClockwise
+              className="h-4 w-4 animate-spin"
+              style={{ color: "var(--muted-foreground)" }}
+            />
+            <p className="text-sm text-muted-foreground">
+              Installing...
+            </p>
+          </div>
+        );
+
+      case "error":
+        return (
+          <div className="space-y-3">
+            <p className="text-sm" style={{ color: "var(--destructive, #ef4444)" }}>
+              Update check failed
+            </p>
+            {updateState.error && (
+              <p className="text-xs text-muted-foreground">
+                {updateState.error}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleCheck}
+              className="rounded-md px-3 py-1.5 text-xs font-medium cursor-pointer"
+              style={{
+                border: "1px solid color-mix(in srgb, var(--foreground) 20%, transparent)",
+                backgroundColor: "transparent",
+                color: "var(--foreground)",
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <div className="space-y-6 p-6">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold">About &amp; Updates</h2>
+        <p className="text-sm text-muted-foreground">
+          Application version and update status.
+        </p>
+      </div>
+
+      {appVersion && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium">Current version</p>
+          <span className="text-xs tabular-nums text-muted-foreground font-mono">
+            v{appVersion}
+          </span>
+        </div>
+      )}
+
+      <div
+        className="rounded-lg p-4"
+        style={{
+          border: "1px solid color-mix(in srgb, var(--foreground) 10%, transparent)",
+        }}
+      >
+        {renderStatusBlock()}
+      </div>
+    </div>
+  );
+}
+
+type Pane = "appearance" | "terminal" | "controls" | "about";
 
 const NAV_ITEMS: {
   id: Pane;
@@ -506,6 +766,7 @@ const NAV_ITEMS: {
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "terminal", label: "Terminal", icon: Terminal },
     { id: "controls", label: "Controls", icon: Keyboard },
+    { id: "about", label: "About & Updates", icon: Info },
   ];
 
 function CloseButton({ onClick }: { onClick: () => void }) {
@@ -629,6 +890,7 @@ export default function App() {
         {activePane === "appearance" && <AppearancePane />}
         {activePane === "terminal" && <TerminalPane />}
         {activePane === "controls" && <ControlsPane />}
+        {activePane === "about" && <AboutPane />}
       </div>
     </div>
   );

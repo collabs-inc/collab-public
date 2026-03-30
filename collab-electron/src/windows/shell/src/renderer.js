@@ -1096,6 +1096,12 @@ async function init() {
 	// -- Update pill --
 
 	let updateState = { status: "idle" };
+	const toastedVersions = new Set();
+	const updateToast = document.getElementById("update-toast");
+	const updateToastText = document.getElementById("update-toast-text");
+	const updateToastAction = document.getElementById("update-toast-action");
+	const updateToastDismiss = document.getElementById("update-toast-dismiss");
+	let toastAutoHideTimer = null;
 	const isDevMode = import.meta.env.DEV;
 
 	function renderUpdatePill() {
@@ -1150,6 +1156,102 @@ async function init() {
 		}
 	}
 
+	function hideUpdateToast() {
+		updateToast.classList.remove("visible");
+		updateToast.style.display = "none";
+		if (toastAutoHideTimer) {
+			clearTimeout(toastAutoHideTimer);
+			toastAutoHideTimer = null;
+		}
+	}
+
+	function showToast(text, actionLabel, actionFn, autoHideMs) {
+		updateToastText.textContent = text;
+		updateToastAction.textContent = actionLabel;
+		updateToastAction.onclick = () => {
+			hideUpdateToast();
+			actionFn();
+		};
+		updateToast.style.display = "flex";
+
+		requestAnimationFrame(() => {
+			updateToast.classList.add("visible");
+		});
+
+		if (toastAutoHideTimer) clearTimeout(toastAutoHideTimer);
+		toastAutoHideTimer = setTimeout(hideUpdateToast, autoHideMs);
+	}
+
+	function renderUpdateToast(state) {
+		if (state.status === "error" && state.error) {
+			showToast(
+				"Download failed",
+				"Retry",
+				() => window.shellApi.updateCheck(),
+				10000,
+			);
+			return;
+		}
+
+		if (state.status !== "available") return;
+		if (!state.version) return;
+		if (toastedVersions.has(state.version)) return;
+
+		const settingsOverlay = document.getElementById("settings-overlay");
+		if (settingsOverlay && settingsOverlay.classList.contains("visible")) return;
+
+		toastedVersions.add(state.version);
+
+		showToast(
+			`Update available: v${state.version}`,
+			"Download",
+			() => window.shellApi.updateDownload(),
+			15000,
+		);
+	}
+
+	updateToastDismiss.addEventListener("click", () => {
+		hideUpdateToast();
+	});
+
+	// -- Release notes tooltip --
+
+	const releaseNotesTooltip = (() => {
+		let el = document.getElementById("release-notes-tooltip");
+		if (!el) {
+			el = document.createElement("div");
+			el.id = "release-notes-tooltip";
+			document.body.appendChild(el);
+		}
+		return el;
+	})();
+
+	function showReleaseNotesTooltip() {
+		if (
+			updateState.status !== "available" &&
+			updateState.status !== "ready"
+		) return;
+		if (!updateState.releaseNotes) return;
+
+		releaseNotesTooltip.textContent = updateState.releaseNotes;
+		const rect = updatePill.getBoundingClientRect();
+		releaseNotesTooltip.style.top = (rect.bottom + 4) + "px";
+		releaseNotesTooltip.style.right = (window.innerWidth - rect.right) + "px";
+		releaseNotesTooltip.style.left = "";
+		releaseNotesTooltip.classList.add("visible");
+
+		updatePill.removeAttribute("title");
+	}
+
+	function hideReleaseNotesTooltip() {
+		releaseNotesTooltip.classList.remove("visible");
+	}
+
+	updatePill.addEventListener("mouseenter", showReleaseNotesTooltip);
+	updatePill.addEventListener("mouseleave", hideReleaseNotesTooltip);
+	window.addEventListener("scroll", hideReleaseNotesTooltip, true);
+	window.addEventListener("resize", hideReleaseNotesTooltip);
+
 	window.shellApi.updateGetStatus().then((s) => {
 		updateState = s;
 		renderUpdatePill();
@@ -1158,6 +1260,8 @@ async function init() {
 	window.shellApi.onUpdateStatus((s) => {
 		updateState = s;
 		renderUpdatePill();
+		try { renderUpdateToast(s); } catch (e) { console.warn("Toast render error:", e); }
+		singletonWebviews.settings?.send("update:status", s);
 	});
 
 	settingsBtn.addEventListener("click", () => {
