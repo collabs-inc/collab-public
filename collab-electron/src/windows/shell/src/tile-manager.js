@@ -194,6 +194,9 @@ export function createTileManager({
 		} else if (tile.cwd) {
 			params.set("cwd", tile.cwd);
 		}
+		if (tile.command) {
+			params.set("command", tile.command);
+		}
 		const qs = params.toString();
 		wv.setAttribute(
 			"src",

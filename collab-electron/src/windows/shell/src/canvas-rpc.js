@@ -161,6 +161,27 @@ export function createCanvasRpc({
 					result = {};
 					break;
 				}
+			case "launchTerminal": {
+				const size = defaultSize("term");
+				const pos = params.position
+					? { x: params.position.x, y: params.position.y }
+					: findAutoPlacement(tiles, size.width, size.height);
+
+				const extra = {};
+				if (params.size?.width) extra.width = params.size.width;
+				if (params.size?.height) extra.height = params.size.height;
+				if (params.cwd) extra.cwd = params.cwd;
+				if (params.command) extra.command = params.command;
+				if (params.title) extra.title = params.title;
+
+				const tile = tileManager.createCanvasTile(
+					"term", pos.x, pos.y, extra,
+				);
+				tileManager.spawnTerminalWebview(tile, true);
+				tileManager.saveCanvasImmediate();
+				result = { tileId: tile.id };
+				break;
+			}
 				default: {
 					respondError(
 						requestId, -32601,
