@@ -458,6 +458,7 @@ export function createTileManager({
 				spawnBrowserWebview(t);
 				saveCanvasImmediate();
 			},
+			onQuickCommand: (id, btnEl) => showQuickCommandDropdown(id, btnEl),
 		});
 
 		// Double-click title bar → center tile in viewport
@@ -662,6 +663,136 @@ export function createTileManager({
 	}
 
 	// -- Tile updates for external events --
+
+	// -- Quick command dropdown --
+
+	let activeQuickDropdown = null;
+
+	function closeQuickDropdown() {
+		if (activeQuickDropdown) {
+			activeQuickDropdown.remove();
+			activeQuickDropdown = null;
+		}
+	}
+
+	function showQuickCommandDropdown(tileId, btnEl) {
+		closeQuickDropdown();
+
+		const tile = getTile(tileId);
+		if (!tile || tile.type !== "term" || !tile.ptySessionId) return;
+
+		const dropdown = document.createElement("div");
+		dropdown.className = "quick-cmd-dropdown";
+		activeQuickDropdown = dropdown;
+
+		const renderCommands = async () => {
+			const commands = (await window.shellApi.getPref("quickCommands")) || [];
+
+			dropdown.innerHTML = "";
+
+			if (commands.length > 0) {
+				for (let i = 0; i < commands.length; i++) {
+					const cmd = commands[i];
+					const item = document.createElement("div");
+					item.className = "quick-cmd-item";
+					const label = document.createElement("span");
+					label.className = "quick-cmd-item-label";
+					label.textContent = cmd;
+					item.appendChild(label);
+					const delBtn = document.createElement("button");
+					delBtn.className = "quick-cmd-del-btn";
+					delBtn.title = "Delete";
+					delBtn.innerHTML = "&times;";
+					delBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+					delBtn.addEventListener("click", async (e) => {
+						e.stopPropagation();
+						const updated = [...commands];
+						updated.splice(i, 1);
+						await window.shellApi.setPref("quickCommands", updated);
+						renderCommands();
+					});
+					item.appendChild(delBtn);
+					item.addEventListener("mousedown", (e) => e.stopPropagation());
+					item.addEventListener("click", (e) => {
+						if (e.target === delBtn) return;
+						e.stopPropagation();
+						window.shellApi.ptyWrite(tile.ptySessionId, cmd + "\n");
+						closeQuickDropdown();
+					});
+					dropdown.appendChild(item);
+				}
+
+				const sep = document.createElement("div");
+				sep.className = "quick-cmd-separator";
+				dropdown.appendChild(sep);
+			}
+
+			const addItem = document.createElement("div");
+			addItem.className = "quick-cmd-add";
+			addItem.textContent = "+ Add command\u2026";
+			addItem.addEventListener("mousedown", (e) => e.stopPropagation());
+			addItem.addEventListener("click", (e) => {
+				e.stopPropagation();
+				addItem.replaceWith(createAddInput(commands, tile));
+			});
+			dropdown.appendChild(addItem);
+		};
+
+		renderCommands();
+
+		// Position dropdown relative to the button
+		const btnRect = btnEl.getBoundingClientRect();
+		const tileContainer = btnEl.closest(".canvas-tile");
+		const tileRect = tileContainer.getBoundingClientRect();
+		dropdown.style.right = `${tileRect.right - btnRect.left}px`;
+		dropdown.style.top = `${btnRect.bottom - tileRect.top + 4}px`;
+
+		tileContainer.appendChild(dropdown);
+	}
+
+	function createAddInput(existingCommands, tile) {
+		const wrapper = document.createElement("div");
+		wrapper.className = "quick-cmd-input-wrapper";
+
+		const input = document.createElement("input");
+		input.className = "quick-cmd-input";
+		input.placeholder = "Command\u2026";
+		input.addEventListener("mousedown", (e) => e.stopPropagation());
+
+		input.addEventListener("keydown", async (e) => {
+			e.stopPropagation();
+			if (e.key === "Enter") {
+				const cmd = input.value.trim();
+				if (!cmd) return;
+				const updated = [...existingCommands, cmd];
+				await window.shellApi.setPref("quickCommands", updated);
+				window.shellApi.ptyWrite(tile.ptySessionId, cmd + "\n");
+				closeQuickDropdown();
+			}
+			if (e.key === "Escape") {
+				closeQuickDropdown();
+			}
+		});
+
+		wrapper.appendChild(input);
+		// Auto-focus after DOM insert
+		requestAnimationFrame(() => input.focus());
+		return wrapper;
+	}
+
+	// Click outside closes dropdown
+	document.addEventListener("mousedown", (e) => {
+		if (activeQuickDropdown && !activeQuickDropdown.contains(e.target)) {
+			closeQuickDropdown();
+		}
+	});
+
+	// Escape key closes dropdown
+	document.addEventListener("keydown", (e) => {
+		if (e.key === "Escape" && activeQuickDropdown) {
+			closeQuickDropdown();
+		}
+	});
 
 	function updateTileForRename(oldPath, newPath) {
 		let anyUpdated = false;
