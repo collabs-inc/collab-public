@@ -32,6 +32,8 @@ function App() {
     const isRestored = params.get("restored") === "1";
     const cwd = params.get("cwd") || undefined;
 
+    const command = params.get("command") || undefined;
+
     const createFreshSession = (
       target?: string,
       nextCwd?: string,
@@ -44,6 +46,13 @@ function App() {
           window.api.notifyPtySessionId(
             result.sessionId,
           );
+          // If a command was provided (e.g. from canvas.launchTerminal),
+          // write it to the PTY after shell init
+          if (command) {
+            setTimeout(() => {
+              window.api.ptyWrite(result.sessionId, command + "\n");
+            }, 300);
+          }
         })
         .catch(() => {
           setExited(true);

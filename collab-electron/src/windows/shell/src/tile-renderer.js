@@ -175,6 +175,7 @@ export function createTileDOM(tile, callbacks) {
 }
 
 export function getTileLabel(tile) {
+  if (tile.title) return { parent: "", name: tile.title };
   if (tile.type === "term") {
     if (tile.cwd) return splitFilepath(tile.cwd);
     if (tile.displayName) return { parent: "", name: tile.displayName };

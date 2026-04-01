@@ -33,7 +33,7 @@ function sendToShell(
 
     shellWindow!.webContents.send("canvas:rpc-request", {
       requestId,
-      method,
+      method: method.replace(/^canvas\./, ""),
       params,
     });
   });
@@ -141,4 +141,23 @@ export function registerCanvasRpc(win: BrowserWindow): void {
       },
     },
   );
+
+  registerMethod(
+    "canvas.launchTerminal",
+    (params) => sendToShell("canvas.launchTerminal", params),
+    {
+      description:
+        "Launch a new terminal tile and optionally run a command in it",
+      params: {
+        command: "(optional) Shell command to execute after the terminal opens",
+        cwd: "(optional) Working directory for the terminal session",
+        title: "(optional) Display title for the tile",
+        session_id:
+          "(optional) External session identifier for tracking",
+        position: "(optional) {x, y} canvas coordinates",
+        size: "(optional) {width, height} in pixels",
+      },
+    },
+  );
+
 }
