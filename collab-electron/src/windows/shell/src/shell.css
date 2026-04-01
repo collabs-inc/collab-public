@@ -1178,3 +1178,100 @@ body.platform-win {
 .tile-url-input::placeholder {
 	color: rgba(128, 128, 128, 0.5);
 }
+
+/* ── Quick command dropdown ── */
+
+.quick-cmd-dropdown {
+	position: absolute;
+	min-width: 180px;
+	max-width: 320px;
+	max-height: 260px;
+	overflow-y: auto;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+	padding: 4px 0;
+	z-index: 9999;
+}
+
+.quick-cmd-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 12px;
+	font-size: 12px;
+	font-family: var(--font-mono);
+	color: var(--fg);
+	cursor: pointer;
+}
+
+.quick-cmd-item-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.quick-cmd-del-btn {
+	all: unset;
+	font-size: 14px;
+	line-height: 1;
+	color: var(--muted);
+	cursor: pointer;
+	opacity: 0;
+	flex-shrink: 0;
+	padding: 0 2px;
+	border-radius: 3px;
+}
+
+.quick-cmd-item:hover .quick-cmd-del-btn {
+	opacity: 0.6;
+}
+
+.quick-cmd-del-btn:hover {
+	opacity: 1 !important;
+	color: #e53935;
+}
+
+.quick-cmd-item:hover {
+	background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
+.quick-cmd-separator {
+	height: 1px;
+	margin: 4px 8px;
+	background: var(--border);
+}
+
+.quick-cmd-add {
+	padding: 6px 12px;
+	font-size: 12px;
+	font-family: var(--font-mono);
+	color: var(--muted);
+	cursor: pointer;
+}
+
+.quick-cmd-add:hover {
+	color: var(--fg);
+}
+
+.quick-cmd-input-wrapper {
+	padding: 4px 8px;
+}
+
+.quick-cmd-input {
+	width: 100%;
+	padding: 4px 6px;
+	font-size: 12px;
+	font-family: var(--font-mono);
+	color: var(--fg);
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	outline: none;
+}
+
+.quick-cmd-input:focus {
+	border-color: var(--fg);
+}

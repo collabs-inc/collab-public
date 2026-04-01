@@ -8,6 +8,7 @@ import { splitDisplayPath } from "@collab/shared/path-utils";
  * @param {(id: string, e?: MouseEvent) => void} callbacks.onFocus
  * @param {((id: string) => void)|null} [callbacks.onOpenInViewer]
  * @param {((id: string, url: string) => void)|null} [callbacks.onNavigate]
+ * @param {((id: string, btnEl: HTMLElement) => void)|null} [callbacks.onQuickCommand]
  */
 export function createTileDOM(tile, callbacks) {
   const container = document.createElement("div");
@@ -143,6 +144,19 @@ export function createTileDOM(tile, callbacks) {
       callbacks.onOpenInViewer(tile.id);
     });
     btnGroup.appendChild(viewBtn);
+  }
+
+  if (tile.type === "term" && callbacks.onQuickCommand) {
+    const quickBtn = document.createElement("button");
+    quickBtn.className = "tile-action-btn tile-quick-cmd-btn";
+    quickBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M9.5 1L4 9h4l-.5 6L12 7H8z"/></svg>`;
+    quickBtn.title = "Quick commands";
+    quickBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+    quickBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      callbacks.onQuickCommand(tile.id, quickBtn);
+    });
+    btnGroup.insertBefore(quickBtn, btnGroup.firstChild);
   }
 
   const closeBtn = document.createElement("button");
