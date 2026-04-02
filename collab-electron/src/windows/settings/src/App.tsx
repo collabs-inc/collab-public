@@ -8,6 +8,7 @@ import {
   Moon,
   Monitor,
   Terminal,
+  Lightning,
 } from "@phosphor-icons/react";
 
 type ThemeMode = "light" | "dark" | "system";
@@ -25,6 +26,7 @@ interface SettingsApi {
   getAgents: () => Promise<AgentStatus[]>;
   installSkill: (agentId: string) => Promise<{ ok: boolean }>;
   uninstallSkill: (agentId: string) => Promise<{ ok: boolean }>;
+  restartApp: () => Promise<void>;
   close: () => void;
 }
 
@@ -457,6 +459,22 @@ function WindowsTerminalPane() {
         </p>
       </div>
 
+      <div
+        className="rounded-md px-3 py-2.5"
+        style={{
+          border:
+            "1px solid color-mix(in srgb, var(--foreground) 10%, transparent)",
+          backgroundColor:
+            "color-mix(in srgb, var(--foreground) 4%, transparent)",
+        }}
+      >
+        <p className="text-sm text-muted-foreground">
+          PowerShell terminals do not support saved sessions. Use a WSL
+          terminal if you want terminal sessions to be restored after reopening
+          the app.
+        </p>
+      </div>
+
       <div className="space-y-2">
         <p className="text-sm font-medium">Terminal target</p>
         <div className="space-y-1.5">
@@ -574,12 +592,163 @@ function IntegrationsPane() {
             </button>
           </div>
         ))}
+        </div>
+    </div>
+  );
+}
+        
+
+function ToggleSwitch({
+  enabled,
+  onToggle,
+}: {
+  enabled: boolean;
+  onToggle: (value: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      onClick={() => onToggle(!enabled)}
+      className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer"
+      style={{
+        backgroundColor: enabled
+          ? "var(--accent)"
+          : "color-mix(in srgb, var(--foreground) 20%, transparent)",
+      }}
+    >
+      <span
+        className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform"
+        style={{
+          transform: enabled ? "translateX(17px)" : "translateX(3px)",
+        }}
+      />
+    </button>
+  );
+}
+
+type RendererMode = "webgl2" | "canvas2d" | "xterm";
+
+const RENDERER_OPTIONS: {
+  id: RendererMode;
+  label: string;
+  description: string;
+}[] = [
+  {
+    id: "webgl2",
+    label: "GPU-accelerated (WebGL)",
+    description: "Hardware-accelerated rendering via xterm.js WebGL addon. Best performance for many terminals.",
+  },
+  {
+    id: "canvas2d",
+    label: "Standard (DOM renderer)",
+    description: "xterm.js DOM renderer. Good compatibility, no GPU required.",
+  },
+  {
+    id: "xterm",
+    label: "Legacy (per-terminal webview)",
+    description: "Original renderer using separate webview processes. Most compatible, higher memory usage.",
+  },
+];
+
+function PerformancePane() {
+  const [rendererMode, setRendererMode] = useState<RendererMode>("webgl2");
+  const [uncapFrameRate, setUncapFrameRate] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      api.getPref("inProcessTerminals"),
+      api.getPref("gpuRenderer"),
+      api.getPref("uncapFrameRate"),
+    ]).then(([inProcess, gpu, uncap]) => {
+      if (inProcess === false) {
+        setRendererMode("xterm");
+      } else if (gpu === false) {
+        setRendererMode("canvas2d");
+      } else {
+        setRendererMode("webgl2");
+      }
+      setUncapFrameRate(uncap === true);
+    }).catch(() => {});
+  }, []);
+
+  async function handleRendererChange(mode: RendererMode) {
+    setRendererMode(mode);
+    switch (mode) {
+      case "webgl2":
+        await api.setPref("inProcessTerminals", true);
+        await api.setPref("gpuRenderer", true);
+        break;
+      case "canvas2d":
+        await api.setPref("inProcessTerminals", true);
+        await api.setPref("gpuRenderer", false);
+        break;
+      case "xterm":
+        await api.setPref("inProcessTerminals", false);
+        await api.setPref("gpuRenderer", false);
+        break;
+    }
+  }
+
+  async function handleFpsToggle(value: boolean) {
+    setUncapFrameRate(value);
+    await api.setPref("uncapFrameRate", value);
+  }
+
+  return (
+    <div className="space-y-6 p-6">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold">Performance</h2>
+        <p className="text-sm text-muted-foreground">
+          Changes take effect after restarting the app.
+          <button
+            type="button"
+            onClick={() => api.restartApp()}
+            className="ml-2 text-sm font-medium underline cursor-pointer"
+            style={{ color: "var(--accent)" }}
+          >
+            Restart now
+          </button>
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Terminal renderer</p>
+        <div className="space-y-1.5">
+          {RENDERER_OPTIONS.map(({ id, label, description }) => (
+            <RadioOption
+              key={id}
+              selected={rendererMode === id}
+              onClick={() => { void handleRendererChange(id); }}
+              label={label}
+              description={description}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">Uncap frame rate</p>
+          <p className="text-xs text-muted-foreground">
+            Remove the frame rate limit for higher refresh rate displays (120Hz+).
+          </p>
+        </div>
+        <ToggleSwitch enabled={uncapFrameRate} onToggle={(v) => { void handleFpsToggle(v); }} />
+      </div>
+
+      <div className="space-y-0.5">
+        <p className="text-sm font-medium">Performance overlay</p>
+        <p className="text-xs text-muted-foreground">
+          Press <kbd className="px-1 py-0.5 rounded text-xs font-mono" style={{ backgroundColor: "color-mix(in srgb, var(--foreground) 10%, transparent)" }}>F3</kbd> in the shell window to toggle the FPS counter, frame time graph, and GPU/CPU timing overlay.
+        </p>
       </div>
     </div>
   );
 }
 
-type Pane = "appearance" | "terminal" | "integrations" | "controls";
+type Pane = "appearance" | "terminal" | "integrations" | "performance" | "controls";
 
 const NAV_ITEMS: {
   id: Pane;
@@ -589,6 +758,7 @@ const NAV_ITEMS: {
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "terminal", label: "Terminal", icon: Terminal },
     { id: "integrations", label: "Integrations", icon: PuzzlePiece },
+    { id: "performance", label: "Performance", icon: Lightning },
     { id: "controls", label: "Controls", icon: Keyboard },
   ];
 
@@ -713,6 +883,7 @@ export default function App() {
         {activePane === "appearance" && <AppearancePane />}
         {activePane === "terminal" && <TerminalPane />}
         {activePane === "integrations" && <IntegrationsPane />}
+        {activePane === "performance" && <PerformancePane />}
         {activePane === "controls" && <ControlsPane />}
       </div>
     </div>

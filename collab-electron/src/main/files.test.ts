@@ -5,8 +5,16 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 mock.module("@collab/shared/image", () => ({
-  IMAGE_EXTENSIONS: new Set([".png", ".jpg"]),
-  isImageFile: (p: string) => /\.(png|jpg)$/i.test(p),
+  IMAGE_EXTENSIONS: new Set([
+    ".png", ".jpg", ".jpeg", ".gif", ".webp",
+    ".bmp", ".tiff", ".tif", ".avif", ".heic", ".heif",
+  ]),
+  isImageFile: (p: string) => {
+    const dot = p.lastIndexOf(".");
+    if (dot === -1) return false;
+    return [".png",".jpg",".jpeg",".gif",".webp",".bmp",".tiff",".tif",".avif",".heic",".heif"]
+      .includes(p.slice(dot).toLowerCase());
+  },
 }));
 
 const { fsWriteFile, atomicWriteFileSync } = await import("./files");

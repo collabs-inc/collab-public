@@ -65,6 +65,7 @@ export function attachDrag(titleBar, tile, {
     }
 
     let moved = false;
+    let dragRafId = 0;
 
     function onMove(e) {
       const dx = (e.clientX - startMX) / viewport.zoom;
@@ -81,10 +82,17 @@ export function attachDrag(titleBar, tile, {
         tile.x = startTX + dx;
         tile.y = startTY + dy;
       }
-      onUpdate();
+      if (!dragRafId) {
+        dragRafId = requestAnimationFrame(() => {
+          dragRafId = 0;
+          onUpdate();
+        });
+      }
     }
 
     function onUp(e) {
+      if (dragRafId) { cancelAnimationFrame(dragRafId); dragRafId = 0; }
+      onUpdate(); // final position
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       enablePointerEvents(webviews);
@@ -294,6 +302,8 @@ export function attachResize(
         wv.webview.style.pointerEvents = "none";
       }
 
+      let resizeRafId = 0;
+
       function onMove(e) {
         const dx = (e.clientX - startMX) / viewport.zoom;
         const dy = (e.clientY - startMY) / viewport.zoom;
@@ -325,10 +335,17 @@ export function attachResize(
           tile.height = newH;
         }
 
-        onUpdate();
+        if (!resizeRafId) {
+          resizeRafId = requestAnimationFrame(() => {
+            resizeRafId = 0;
+            onUpdate();
+          });
+        }
       }
 
       function onUp() {
+        if (resizeRafId) { cancelAnimationFrame(resizeRafId); resizeRafId = 0; }
+        onUpdate(); // final position
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
         for (const wv of webviews) {

@@ -1,16 +1,17 @@
 import { describe, test, expect, afterEach, beforeAll } from "bun:test";
 import * as fs from "node:fs";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import { loadConfig, setPref } from "./config";
+import { getDefaultWslDistro } from "./terminal-target";
 import {
-  getTmuxBin,
   getTmuxConf,
+  getTmuxSpawnSpec,
   getSocketName,
   writeSessionMeta,
   readSessionMeta,
   deleteSessionMeta,
   SESSION_DIR,
-  tmuxExec,
+  tmuxExecForTarget,
   tmuxSessionName,
 } from "./tmux";
 import {
@@ -21,6 +22,7 @@ import {
   discoverSessions,
   cleanDetachedSessions,
   verifyTmuxAvailable,
+  setShuttingDown,
 } from "./pty";
 
 // Force tmux mode for these tests — the default is now "sidecar"
@@ -29,6 +31,25 @@ beforeAll(() => {
   const config = loadConfig();
   setPref(config, "terminalMode", "tmux");
 });
+
+function withPlatform<T>(platform: NodeJS.Platform, fn: () => T): T {
+  const original = process.platform;
+  Object.defineProperty(process, "platform", { value: platform });
+  try {
+    return fn();
+  } finally {
+    Object.defineProperty(process, "platform", { value: original });
+  }
+}
+
+function testTmuxTarget(): string | undefined {
+  if (process.platform !== "win32") return undefined;
+  const distro = getDefaultWslDistro();
+  if (!distro) {
+    throw new Error("No WSL distro available for tmux tests");
+  }
+  return `wsl:${distro}`;
+}
 
 describe("tmux helpers", () => {
   const testId = "test-" + Date.now().toString(16);
@@ -71,6 +92,32 @@ describe("tmux helpers", () => {
       () => deleteSessionMeta("nonexistent-id"),
     ).not.toThrow();
   });
+
+  test("getTmuxSpawnSpec uses direct WSL exec without host tmux.conf", () => {
+    const spec = withPlatform("win32", () =>
+      getTmuxSpawnSpec(
+        "wsl:Ubuntu",
+        "list-sessions",
+        "-F",
+        "#{session_name}",
+      )
+    );
+
+    expect(spec.command).toBe("wsl.exe");
+    expect(spec.args).toEqual([
+      "-d",
+      "Ubuntu",
+      "-e",
+      "tmux",
+      "-L",
+      getSocketName(),
+      "-u",
+      "list-sessions",
+      "-F",
+      "#{session_name}",
+    ]);
+    expect(spec.env).toBeUndefined();
+  });
 });
 
 describe("pty lifecycle via tmux", () => {
@@ -96,9 +143,10 @@ describe("pty lifecycle via tmux", () => {
   });
 
   test("createSession sets COLLAB_PTY_SESSION_ID env", async () => {
-    const { sessionId } = await createSession("/tmp");
+    const { sessionId, target } = await createSession("/tmp");
     const name = tmuxSessionName(sessionId);
-    const env = tmuxExec(
+    const env = tmuxExecForTarget(
+      target,
       "show-environment", "-t", name,
       "COLLAB_PTY_SESSION_ID",
     );
@@ -113,7 +161,7 @@ describe("discoverSessions", () => {
   });
 
   test("discovers sessions created by createSession", async () => {
-    const { sessionId } = await createSession("/tmp");
+    const { sessionId, target } = await createSession("/tmp");
     killAll(); // detach client, tmux session survives
 
     const discovered = await discoverSessions();
@@ -125,7 +173,8 @@ describe("discoverSessions", () => {
 
     // Clean up tmux session
     try {
-      tmuxExec(
+      tmuxExecForTarget(
+        target,
         "kill-session", "-t", tmuxSessionName(sessionId),
       );
     } catch {}
@@ -146,7 +195,7 @@ describe("discoverSessions", () => {
 
   test("kills orphan tmux sessions without metadata", async () => {
     // Create a session, then delete its metadata
-    const { sessionId } = await createSession("/tmp");
+    const { sessionId, target } = await createSession("/tmp");
     killAll();
     deleteSessionMeta(sessionId);
 
@@ -157,7 +206,7 @@ describe("discoverSessions", () => {
     const name = tmuxSessionName(sessionId);
     let alive = true;
     try {
-      tmuxExec("has-session", "-t", name);
+      tmuxExecForTarget(target, "has-session", "-t", name);
     } catch {
       alive = false;
     }
@@ -167,9 +216,13 @@ describe("discoverSessions", () => {
 
 describe("cleanDetachedSessions", () => {
   test("kills sessions not in the active list", async () => {
-    const { sessionId: keep } = await createSession("/tmp");
-    const { sessionId: detached } = await createSession("/tmp");
+    const keepSession = await createSession("/tmp");
+    const detachedSession = await createSession("/tmp");
+    const { sessionId: keep, target } = keepSession;
+    const { sessionId: detached } = detachedSession;
     killAll(); // detach clients, tmux sessions survive
+    setShuttingDown(false);
+    await Bun.sleep(500); // WSL tmux needs time to notice client disconnect
 
     await cleanDetachedSessions([keep]);
 
@@ -183,7 +236,7 @@ describe("cleanDetachedSessions", () => {
     const name = tmuxSessionName(detached);
     let alive = true;
     try {
-      tmuxExec("has-session", "-t", name);
+      tmuxExecForTarget(target, "has-session", "-t", name);
     } catch {
       alive = false;
     }
@@ -191,7 +244,8 @@ describe("cleanDetachedSessions", () => {
 
     // Clean up
     try {
-      tmuxExec(
+      tmuxExecForTarget(
+        target,
         "kill-session", "-t", tmuxSessionName(keep),
       );
     } catch {}
@@ -200,8 +254,9 @@ describe("cleanDetachedSessions", () => {
   });
 
   test("no-op when all sessions are active", async () => {
-    const { sessionId } = await createSession("/tmp");
+    const { sessionId, target } = await createSession("/tmp");
     killAll();
+    await Bun.sleep(100);
 
     await cleanDetachedSessions([sessionId]);
 
@@ -212,7 +267,8 @@ describe("cleanDetachedSessions", () => {
 
     // Clean up
     try {
-      tmuxExec(
+      tmuxExecForTarget(
+        target,
         "kill-session", "-t", tmuxSessionName(sessionId),
       );
     } catch {}
@@ -220,10 +276,12 @@ describe("cleanDetachedSessions", () => {
   });
 
   test("preserves sessions with attached tmux clients", async () => {
+    const target = testTmuxTarget();
     const sessionId = "test-attached-" + Date.now().toString(16);
     const name = tmuxSessionName(sessionId);
 
-    tmuxExec(
+    tmuxExecForTarget(
+      target,
       "new-session", "-d", "-s", name,
       "-x", "80", "-y", "24",
     );
@@ -231,15 +289,26 @@ describe("cleanDetachedSessions", () => {
       shell: "/bin/zsh",
       cwd: "/tmp",
       createdAt: new Date().toISOString(),
+      backend: "tmux",
+      target,
     });
 
     // Attach a control-mode client (node-pty doesn't
     // register as attached under bun's runtime)
+    const spec = getTmuxSpawnSpec(
+      target,
+      "-C",
+      "attach-session",
+      "-t",
+      name,
+    );
     const client = spawn(
-      getTmuxBin(),
-      ["-L", getSocketName(), "-u", "-C",
-        "attach-session", "-t", name],
-      { stdio: ["pipe", "pipe", "pipe"] },
+      spec.command,
+      spec.args,
+      {
+        stdio: ["pipe", "pipe", "pipe"],
+        env: spec.env,
+      },
     );
 
     await Bun.sleep(100);
@@ -249,7 +318,7 @@ describe("cleanDetachedSessions", () => {
 
     let alive = true;
     try {
-      tmuxExec("has-session", "-t", name);
+      tmuxExecForTarget(target, "has-session", "-t", name);
     } catch {
       alive = false;
     }
@@ -257,13 +326,14 @@ describe("cleanDetachedSessions", () => {
 
     // Clean up
     client.kill();
-    try { tmuxExec("kill-session", "-t", name); } catch {}
+    try { tmuxExecForTarget(target, "kill-session", "-t", name); } catch {}
     deleteSessionMeta(sessionId);
   });
 });
 
 describe("verifyTmuxAvailable", () => {
   test("does not throw when tmux is available", () => {
+    if (process.platform === "win32") return;
     expect(() => verifyTmuxAvailable()).not.toThrow();
   });
 });
@@ -410,29 +480,24 @@ describe("cross-backend: reconnectSession defaults correctly", () => {
 
 describe("stripTrailingBlanks via scrollback", () => {
   test("scrollback capture strips trailing blank lines", async () => {
-    const { sessionId } = await createSession("/tmp");
+    const { sessionId, target } = await createSession("/tmp");
     const name = tmuxSessionName(sessionId);
 
     // Send a known string to the session
-    tmuxExec(
+    tmuxExecForTarget(
+      target,
       "send-keys", "-t", name, "echo hello-scrollback", "Enter",
     );
 
     // Brief wait for output to appear in tmux buffer
     await new Promise((r) => setTimeout(r, 200));
 
-    // Capture and verify no trailing blank lines
-    const raw = tmuxExec(
+    const raw = tmuxExecForTarget(
+      target,
       "capture-pane", "-t", name,
       "-p", "-e", "-S", "-10000",
     );
-    const lines = raw.split("\n");
-    // Raw output may have trailing blanks; after
-    // stripTrailingBlanks (called in reconnectSession),
-    // they'd be removed. Verify raw capture has content.
-    expect(
-      lines.some((l) => l.includes("hello-scrollback")),
-    ).toBe(true);
+    expect(raw.includes("hello-scrollback")).toBe(true);
 
     await killSession(sessionId);
   });

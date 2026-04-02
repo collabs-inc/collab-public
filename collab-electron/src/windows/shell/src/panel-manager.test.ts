@@ -1,4 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, test, expect, beforeEach, afterAll, mock } from "bun:test";
+import { Window } from "happy-dom";
+
+// Register happy-dom globals for DOM access, clean up after suite
+const win = new Window();
+const savedDoc = globalThis.document;
+const savedWin = globalThis.window;
+const savedHTML = globalThis.HTMLElement;
+globalThis.document = win.document;
+globalThis.window = win;
+globalThis.HTMLElement = win.HTMLElement;
+afterAll(() => {
+  globalThis.document = savedDoc;
+  globalThis.window = savedWin;
+  globalThis.HTMLElement = savedHTML;
+});
 
 // Minimal DOM stub
 function makePanel(id) {
@@ -47,12 +62,12 @@ describe("createPanel", () => {
 
     // Stub shellApi
     window.shellApi = {
-      setPref: vi.fn(),
-      getPref: vi.fn().mockResolvedValue(null),
+      setPref: mock(() => {}),
+      getPref: mock(() => Promise.resolve(null)),
     };
   });
 
-  it("starts visible by default", async () => {
+  test("starts visible by default", async () => {
     const { createPanel } = await import("./panel-manager.js");
     const mgr = createPanel("nav", {
       panel, viewer, resizeHandle, toggle,
@@ -64,7 +79,7 @@ describe("createPanel", () => {
     expect(mgr.isVisible()).toBe(true);
   });
 
-  it("toggles visibility", async () => {
+  test("toggles visibility", async () => {
     const { createPanel } = await import("./panel-manager.js");
     const mgr = createPanel("nav", {
       panel, viewer, resizeHandle, toggle,
@@ -80,7 +95,7 @@ describe("createPanel", () => {
     );
   });
 
-  it("persists width on pref key panel-width-{side}", async () => {
+  test("persists width on pref key panel-width-{side}", async () => {
     const { createPanel } = await import("./panel-manager.js");
     const mgr = createPanel("nav", {
       panel, viewer, resizeHandle, toggle,
@@ -93,7 +108,7 @@ describe("createPanel", () => {
     expect(panel.style.flex).toBe("0 0 350px");
   });
 
-  it("uses direction=-1 for right panels", async () => {
+  test("uses direction=-1 for right panels", async () => {
     const { createPanel } = await import("./panel-manager.js");
     const termPanel = makePanel("panel-terminal");
     const termResize = document.createElement("div");

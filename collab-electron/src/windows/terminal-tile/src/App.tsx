@@ -22,7 +22,7 @@ function App() {
   const [scrollbackData, setScrollbackData] =
     useState<string | null>(null);
   const [sessionMode, setSessionMode] =
-    useState<"tmux" | "sidecar" | undefined>(undefined);
+    useState<"tmux" | "sidecar" | "direct" | undefined>(undefined);
 
   useEffect(() => {
     const params = new URLSearchParams(

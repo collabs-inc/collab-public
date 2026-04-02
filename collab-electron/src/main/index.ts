@@ -15,7 +15,8 @@ import {
   type WebContents,
 } from "electron";
 import { execFileSync } from "node:child_process";
-import { join } from "node:path";
+import path, { join } from "node:path";
+import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { fromCollabFileUrl } from "@collab/shared/collab-file-url";
 import {
@@ -23,6 +24,11 @@ import {
   saveConfig,
   getPref,
   setPref,
+  getTerminalBackend,
+  getTerminalMode,
+  getInProcessTerminals,
+  getGpuRenderer,
+  getUncapFrameRate,
   type WindowState,
   type TerminalTarget,
 } from "./config";
@@ -57,6 +63,16 @@ if (!process.env.LANG || !process.env.LANG.includes("UTF-8")) {
 }
 
 process.on("uncaughtException", (error) => {
+  // node-pty on Windows queues resize commands internally and executes them
+  // asynchronously in a Socket data handler.  If the pty exits between the
+  // queue and the execution the resize throws — but there is no way to wrap
+  // this in a try/catch from userland.  Swallow it instead of logging a
+  // scary "[crash]" line for every dead terminal.
+  if (error.message === "Cannot resize a pty that has already exited") {
+    trackEvent("pty_resize_after_exit");
+    return;
+  }
+
   trackEvent("app_crash", {
     type: "uncaughtException",
     message: error.message,
@@ -432,14 +448,112 @@ function getRendererURL(name: string): string {
   ).href;
 }
 
+let splashWindow: BrowserWindow | null = null;
+let pendingMaximize = false;
+
+const SPLASH_HTML = `<!doctype html><html><head><meta charset="UTF-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#f8f8f8;--fg:#202020;--muted:#71717b;--border:#cecece;--accent:#22a05a;--dot:rgba(0,0,0,0.08);--dot-hi:rgba(34,160,90,0.25)}
+@media(prefers-color-scheme:dark){:root{--bg:#121212;--fg:#dcdcdc;--muted:#848484;--border:rgba(255,255,255,0.2);--accent:#48d282;--dot:rgba(255,255,255,0.07);--dot-hi:rgba(72,210,130,0.35)}}
+body{width:100vw;height:100vh;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;-webkit-app-region:drag}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+.center{position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;animation:fu .5s ease-out both}
+@keyframes fu{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+.wm{font-size:20px;font-weight:600;letter-spacing:.12em;color:var(--fg);text-transform:lowercase}
+.bt{width:160px;height:3px;border-radius:2px;background:var(--border);overflow:hidden}
+.bf{width:30%;height:100%;border-radius:2px;background:var(--accent);animation:bi 1.5s ease-in-out infinite}
+@keyframes bi{0%{transform:translateX(-160px)}100%{transform:translateX(160px)}}
+.st{color:var(--muted);font-size:11px;letter-spacing:.04em}
+</style></head><body>
+<canvas id="g"></canvas>
+<div class="center"><div class="wm">collaborator</div><div class="bt"><div class="bf"></div></div><div class="st" id="st"></div></div>
+<script>
+var c=document.getElementById("g"),x=c.getContext("2d"),d=devicePixelRatio||1;
+c.width=c.offsetWidth*d;c.height=c.offsetHeight*d;x.setTransform(d,0,0,d,0,0);
+var S=36,dk=matchMedia("(prefers-color-scheme:dark)").matches,
+dc=dk?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.08)",
+dh=dk?"rgba(72,210,130,0.35)":"rgba(34,160,90,0.25)",
+w=c.offsetWidth,h=c.offsetHeight,cols=Math.ceil(w/S)+1,rows=Math.ceil(h/S)+1,
+cx=w/2,cy=h/2,md=Math.hypot(cx,cy),t0=performance.now();
+function draw(n){var t=(n-t0)/1e3;x.clearRect(0,0,w,h);
+for(var r=0;r<rows;r++)for(var i=0;i<cols;i++){
+var px=i*S,py=r*S,dd=Math.hypot(px-cx,py-cy)/md,a=t-dd*.5;
+if(a<0)continue;var al=Math.min(a/.3,1),p=.5+.5*Math.sin(t*2-dd*4),hi=p>.92&&a>.4;
+x.globalAlpha=al*(hi?1:.7);x.fillStyle=hi?dh:dc;
+x.beginPath();x.arc(px,py,hi?1.8:1,0,6.283);x.fill()}
+x.globalAlpha=1;requestAnimationFrame(draw)}requestAnimationFrame(draw);
+var msgs=["Pondering","Ruminating","Manifesting","Percolating","Coalescing",
+"Vibing","Synthesizing","Noodling","Concocting","Fermenting",
+"Marinating","Simmering","Crystallizing","Conjuring","Transmuting",
+"Effervescing","Calibrating","Harmonizing","Orchestrating","Materializing",
+"Incubating","Galvanizing","Catalyzing","Distilling","Unfurling"],
+se=document.getElementById("st"),used=[];
+function pick(){if(used.length>=msgs.length)used=[];var i;do{i=Math.floor(Math.random()*msgs.length)}while(used.includes(i));
+used.push(i);return msgs[i]}
+var TI=60,DI=35,WAIT=1500;
+function typeOut(str,cb){var i=0;se.innerHTML='<span class="cu"></span>';
+var iv=setInterval(function(){i++;se.innerHTML=str.slice(0,i)+'<span class="cu"></span>';
+if(i>=str.length){clearInterval(iv);cb()}},TI)}
+function eraseOut(str,cb){var i=str.length;se.innerHTML=str+'<span class="cu"></span>';
+var iv=setInterval(function(){i--;se.innerHTML=str.slice(0,i)+'<span class="cu"></span>';
+if(i<=0){clearInterval(iv);cb()}},DI)}
+function cycle(){var w=pick()+"...";typeOut(w,function(){setTimeout(function(){eraseOut(w,function(){setTimeout(cycle,200)})},WAIT)})}
+cycle();
+<\/script><style>.cu{display:inline-block;width:1.5px;height:1em;background:var(--muted);vertical-align:text-bottom;
+margin-left:1px;animation:blink .8s step-end infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}<\/style></body></html>`;
+
+function createSplashWindow(
+  display: Electron.Display,
+): BrowserWindow {
+  const splashWidth = 420;
+  const splashHeight = 320;
+  const { x, y, width, height } = display.workArea;
+  const splash = new BrowserWindow({
+    width: splashWidth,
+    height: splashHeight,
+    x: Math.round(x + (width - splashWidth) / 2),
+    y: Math.round(y + (height - splashHeight) / 2),
+    frame: false,
+    resizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    backgroundColor: "#121212",
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+    },
+  });
+  splash.loadURL(
+    `data:text/html;charset=utf-8,${encodeURIComponent(SPLASH_HTML)}`,
+  );
+  return splash;
+}
+
+function closeSplash(): void {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.close();
+  }
+  splashWindow = null;
+}
+
 function createWindow(): void {
   const saved = config.window_state;
   const useSaved =
     saved !== null &&
     (saved.isMaximized || boundsVisibleOnAnyDisplay(saved));
   const state = useSaved ? saved : DEFAULT_STATE;
+  pendingMaximize = !!state.isMaximized;
+
+  // Show splash on the display where the main window will appear.
+  const targetPoint = useSaved
+    ? { x: state.x + Math.round(state.width / 2), y: state.y + Math.round(state.height / 2) }
+    : screen.getCursorScreenPoint();
+  const targetDisplay = screen.getDisplayNearestPoint(targetPoint);
+  splashWindow = createSplashWindow(targetDisplay);
 
   const windowOptions: Electron.BrowserWindowConstructorOptions = {
+    show: false,
     width: state.width,
     height: state.height,
     minWidth: 400,
@@ -475,10 +589,6 @@ function createWindow(): void {
 
   mainWindow = new BrowserWindow(windowOptions);
 
-  if (state.isMaximized) {
-    mainWindow.maximize();
-  }
-
   mainWindow.on("move", debouncedSaveWindowState);
   mainWindow.on("resize", debouncedSaveWindowState);
   mainWindow.on("close", () => {
@@ -496,6 +606,7 @@ function createWindow(): void {
   mainWindow.loadURL(getRendererURL("shell"));
 
   setMainWindow(mainWindow);
+  pty.registerShellWebContents(mainWindow.webContents.id);
   registerCanvasRpc(mainWindow);
 }
 
@@ -555,7 +666,7 @@ ipcMain.handle(
 
 ipcMain.handle(
   "pty:create",
-  (
+  async (
     event,
     params?: {
       cwd?: string;
@@ -564,45 +675,71 @@ ipcMain.handle(
       tileId?: string;
       target?: TerminalTarget;
     },
-  ) =>
-    pty.createSession(
-      params?.cwd,
+  ) => {
+    let cwd = params?.cwd;
+    if (typeof cwd === "string" && cwd.length > 0) {
+      const resolved = path.resolve(cwd);
+      try {
+        const s = await fs.stat(resolved);
+        if (!s.isDirectory()) cwd = undefined;
+      } catch {
+        cwd = undefined;  // falls back to homedir in createSession
+      }
+    }
+    return pty.createSession(
+      cwd,
       event.sender.id,
       params?.cols,
       params?.rows,
       params?.target,
       params?.tileId,
-    ),
+    );
+  },
 );
 
 ipcMain.handle(
   "pty:write",
-  (_event, { sessionId, data }: { sessionId: string; data: string }) =>
-    pty.writeToSession(sessionId, data),
+  (event, { sessionId, data }: { sessionId: string; data: string }) => {
+    pty.assertSessionId(sessionId);
+    if (typeof data !== "string" || data.length > 1_048_576) return;
+    if (!pty.isSessionOwner(sessionId, event.sender.id)) return;
+    pty.writeToSession(sessionId, data);
+  },
 );
 
 ipcMain.handle(
   "pty:send-raw-keys",
-  (_event, { sessionId, data }: { sessionId: string; data: string }) =>
-    pty.sendRawKeys(sessionId, data),
+  (event, { sessionId, data }: { sessionId: string; data: string }) => {
+    pty.assertSessionId(sessionId);
+    if (typeof data !== "string" || data.length > 1_048_576) return;
+    if (!pty.isSessionOwner(sessionId, event.sender.id)) return;
+    pty.sendRawKeys(sessionId, data);
+  },
 );
 
 ipcMain.handle(
   "pty:resize",
   (
-    _event,
+    event,
     {
       sessionId,
       cols,
       rows,
     }: { sessionId: string; cols: number; rows: number },
-  ) => pty.resizeSession(sessionId, cols, rows),
+  ) => {
+    pty.assertSessionId(sessionId);
+    if (!pty.isSessionOwner(sessionId, event.sender.id)) return;
+    return pty.resizeSession(sessionId, cols, rows);
+  },
 );
 
 ipcMain.handle(
   "pty:kill",
-  (_event, { sessionId }: { sessionId: string }) =>
-    pty.killSession(sessionId),
+  (event, { sessionId }: { sessionId: string }) => {
+    pty.assertSessionId(sessionId);
+    if (!pty.isSessionOwner(sessionId, event.sender.id)) return;
+    return pty.killSession(sessionId);
+  },
 );
 
 ipcMain.handle(
@@ -614,40 +751,73 @@ ipcMain.handle(
       cols,
       rows,
     }: { sessionId: string; cols: number; rows: number },
-  ) =>
-    pty.reconnectSession(
+  ) => {
+    pty.assertSessionId(sessionId);
+    return pty.reconnectSession(
       sessionId, cols, rows, event.sender.id,
-    ),
+    );
+  },
 );
 
 ipcMain.handle(
   "pty:discover",
-  () => pty.discoverSessions(),
+  (event) => {
+    if (mainWindow && event.sender.id !== mainWindow.webContents.id) return [];
+    return pty.discoverSessions();
+  },
 );
 
 ipcMain.handle(
   "pty:read-meta",
-  (_event, sessionId: string) => readSessionMeta(sessionId),
+  (event, sessionId: string) => {
+    pty.assertSessionId(sessionId);
+    if (!pty.isSessionOwner(sessionId, event.sender.id)) return null;
+    return readSessionMeta(sessionId);
+  },
 );
 
 ipcMain.handle(
   "pty:clean-detached",
-  (_event, activeSessionIds: string[]) =>
-    pty.cleanDetachedSessions(activeSessionIds),
+  (event, activeSessionIds: string[]) => {
+    if (mainWindow && event.sender.id !== mainWindow.webContents.id) return;
+    return pty.cleanDetachedSessions(activeSessionIds);
+  },
 );
 
 ipcMain.handle(
   "pty:foreground-process",
-  (_event, sessionId: string) => pty.getForegroundProcess(sessionId),
+  (event, sessionId: string) => {
+    pty.assertSessionId(sessionId);
+    if (!pty.isSessionOwner(sessionId, event.sender.id)) return null;
+    return pty.getForegroundProcess(sessionId);
+  },
 );
 
 ipcMain.handle(
   "pty:capture",
   (
-    _event,
+    event,
     { sessionId, lines }: { sessionId: string; lines?: number },
-  ) => pty.captureSession(sessionId, lines),
+  ) => {
+    pty.assertSessionId(sessionId);
+    if (!pty.isSessionOwner(sessionId, event.sender.id)) return "";
+    const safeLines = typeof lines === "number"
+      ? Math.max(1, Math.min(lines, 10000))
+      : undefined;
+    return pty.captureSession(sessionId, safeLines);
+  },
 );
+
+ipcMain.handle(
+  "shell:get-in-process-terminals",
+  () => getInProcessTerminals()
+);
+
+ipcMain.handle(
+  "shell:get-gpu-renderer",
+  () => getGpuRenderer()
+);
+
 
 let settingsOpen = false;
 
@@ -757,6 +927,12 @@ app.on("web-contents-created", (_event, contents) => {
   });
 });
 
+// Conditionally unlock frame rate based on user preference.
+// Must be set before app.whenReady() — takes effect on next launch.
+if (getUncapFrameRate()) {
+  app.commandLine.appendSwitch("disable-frame-rate-limit");
+}
+
 app.whenReady().then(async () => {
   // Set a standard Chrome user-agent on the browser tile session so sites
   // (especially Google OAuth) treat it as a real browser, not an embedded webview.
@@ -773,8 +949,12 @@ app.whenReady().then(async () => {
 
   shuttingDown = false;
 
-  config = loadConfig();
-  installCli();
+  // Show splash as early as possible — before heavy init work.
+  buildAppMenu();
+  createWindow();
+  registerToggleShortcuts(mainWindow!);
+
+  // Heavy init runs while the splash is visible.
   watcher.startWorker();
   registerIpcHandlers(config);
   registerIntegrationsIpc();
@@ -783,20 +963,25 @@ app.whenReady().then(async () => {
     onBeforeQuit: () => shutdownBackgroundServices(),
   });
 
-  try {
-    await pty.ensureSidecar();
-  } catch (err) {
-    console.error("Sidecar failed to start:", err);
+  if (
+    getTerminalMode() !== "tmux"
+    && getTerminalBackend() === "sidecar"
+  ) {
+    pty.ensureSidecar().catch((err) => {
+      console.error("Sidecar failed to start:", err);
+    });
   }
 
-  buildAppMenu();
-  createWindow();
-  registerToggleShortcuts(mainWindow!);
+  // Defer CLI installation — not needed for startup.
+  setTimeout(() => installCli(), 3000);
 
   initMainAnalytics();
   trackEvent("app_launched");
 
   mainWindow!.webContents.on("did-finish-load", () => {
+    if (pendingMaximize) mainWindow!.maximize();
+    mainWindow!.show();
+    closeSplash();
     sendLoadingDone();
     if (pendingFilePath) {
       mainWindow!.webContents.send(

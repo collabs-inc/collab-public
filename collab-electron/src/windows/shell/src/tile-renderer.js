@@ -226,12 +226,15 @@ export function positionTile(container, tile, panX, panY, zoom) {
   const sx = tile.x * zoom + panX;
   const sy = tile.y * zoom + panY;
 
-  container.style.left = `${sx}px`;
-  container.style.top = `${sy}px`;
-  container.style.width = `${tile.width}px`;
-  container.style.height = `${tile.height}px`;
-  container.style.transform = `scale(${zoom})`;
-  container.style.transformOrigin = "top left";
+  // Use translate3d for GPU-composited positioning (no layout recalc).
+  // width/height only change on resize, not pan — skip if unchanged.
+  container.style.transform = `translate3d(${sx}px, ${sy}px, 0) scale(${zoom})`;
+  if (container._tw !== tile.width || container._th !== tile.height) {
+    container.style.width = `${tile.width}px`;
+    container.style.height = `${tile.height}px`;
+    container._tw = tile.width;
+    container._th = tile.height;
+  }
   container.style.zIndex = String(tile.zIndex);
 }
 

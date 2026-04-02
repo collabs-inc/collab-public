@@ -166,6 +166,7 @@ contextBridge.exposeInMainWorld("api", {
   getPref: (key: string) => ipcRenderer.invoke("pref:get", key),
   setPref: (key: string, value: unknown) =>
     ipcRenderer.invoke("pref:set", key, value),
+  restartApp: () => ipcRenderer.invoke("app:restart"),
   listTerminalTargets: () =>
     ipcRenderer.invoke("terminal:list-targets"),
   getWorkspacePref: (key: string) =>

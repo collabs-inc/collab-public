@@ -52,15 +52,37 @@ export async function loadState(): Promise<CanvasState | null> {
   }
 }
 
+let saving = false;
+let pendingState: CanvasState | null = null;
+
 export async function saveState(state: CanvasState): Promise<void> {
-  if (!existsSync(STATE_DIR)) {
-    await mkdir(STATE_DIR, { recursive: true });
+  pendingState = state; // always keep latest
+
+  if (saving) return; // drainer will pick up pendingState
+
+  saving = true;
+  try {
+    while (pendingState !== null) {
+      const toSave = pendingState;
+      pendingState = null; // clear before async work
+
+      if (!existsSync(STATE_DIR)) {
+        await mkdir(STATE_DIR, { recursive: true });
+      }
+      const tmp = join(
+        tmpdir(),
+        `canvas-state-${crypto.randomUUID()}.json`,
+      );
+      const json = JSON.stringify(toSave, null, 2);
+      await writeFile(tmp, json, "utf-8");
+      try {
+        await rename(tmp, STATE_FILE);
+      } catch {
+        // rename can fail on Windows when another process holds the target.
+        await writeFile(STATE_FILE, json, "utf-8");
+      }
+    }
+  } finally {
+    saving = false;
   }
-  const tmp = join(
-    tmpdir(),
-    `canvas-state-${crypto.randomUUID()}.json`,
-  );
-  const json = JSON.stringify(state, null, 2);
-  await writeFile(tmp, json, "utf-8");
-  await rename(tmp, STATE_FILE);
 }

@@ -14,6 +14,7 @@ import { createCanvasRpc } from "./canvas-rpc.js";
 import { createTileManager } from "./tile-manager.js";
 import { updateTileTitle } from "./tile-renderer.js";
 import { normalizeCommandName } from "@collab/shared/path-utils";
+import { initKeyboardShortcut as initPerfOverlay } from "./perf-overlay.js";
 
 const CANVAS_DBLCLICK_SUPPRESS_MS = 500;
 const IS_WINDOWS = window.shellApi.getPlatform() === "win32";
@@ -108,10 +109,6 @@ async function init() {
 	const updatePill = document.getElementById("update-pill");
 	const dragDropOverlay =
 		document.getElementById("drag-drop-overlay");
-	const loadingOverlay =
-		document.getElementById("loading-overlay");
-	const loadingStatusEl =
-		document.getElementById("loading-status");
 	const tileLayer = document.getElementById("tile-layer");
 	const panelTerminal =
 		document.getElementById("panel-terminal");
@@ -513,7 +510,7 @@ async function init() {
 		const tile = tileManager.createCanvasTile(
 			"term", cx, cy, { cwd },
 		);
-		tileManager.spawnTerminalWebview(tile, true);
+		tileManager.spawnTerminal(tile, true);
 		tileManager.saveCanvasImmediate();
 	});
 
@@ -543,7 +540,7 @@ async function init() {
 			const tile = tileManager.createCanvasTile(
 				"term", cx, cy, { cwd },
 			);
-			tileManager.spawnTerminalWebview(tile, true);
+			tileManager.spawnTerminal(tile, true);
 			tileManager.saveCanvasImmediate();
 		} else if (selected === "new-browser") {
 			const tile = tileManager.createCanvasTile(
@@ -684,7 +681,7 @@ async function init() {
 	// -- Space+click and middle-click pan --
 
 	window.addEventListener("keydown", (e) => {
-		if (e.code === "Space" && !e.target.closest?.("webview")) {
+		if (e.code === "Space" && !e.target.closest?.("webview") && !e.target.closest?.(".terminal-embed-container")) {
 			e.preventDefault();
 			if (!e.repeat && !spaceHeld) {
 				spaceHeld = true;
@@ -732,14 +729,34 @@ async function init() {
 			h.webview.style.pointerEvents = "none";
 		}
 
+		// Use CSS transform on the tile layer during pan for smooth 60fps.
+		// This avoids per-tile style updates and grid redraws on every frame.
+		const tileLayer = document.getElementById("tile-layer");
+		let panRafId = 0;
+
 		function onMove(ev) {
 			viewportState.panX = startPanX + (ev.clientX - startMX);
 			viewportState.panY = startPanY + (ev.clientY - startMY);
-			viewport.updateCanvas();
+			if (!panRafId) {
+				panRafId = requestAnimationFrame(() => {
+					panRafId = 0;
+					// Translate the entire tile layer instead of repositioning each tile
+					if (tileLayer) {
+						const dx = viewportState.panX - startPanX;
+						const dy = viewportState.panY - startPanY;
+						tileLayer.style.transform = `translate(${dx}px, ${dy}px)`;
+					}
+					viewport.drawGrid();
+				});
+			}
 		}
 
 		function onUp() {
 			isPanning = false;
+			if (panRafId) { cancelAnimationFrame(panRafId); panRafId = 0; }
+			// Reset transform and do proper tile repositioning
+			if (tileLayer) { tileLayer.style.transform = ""; }
+			viewport.updateCanvas();
 			canvasEl.classList.remove("panning");
 			if (!spaceHeld) {
 				canvasEl.classList.remove("space-held");
@@ -802,7 +819,7 @@ async function init() {
 			const tile = tileManager.createCanvasTile(
 				"term", cx, cy, { cwd },
 			);
-			tileManager.spawnTerminalWebview(tile, true);
+			tileManager.spawnTerminal(tile, true);
 			tileManager.saveCanvasImmediate();
 		} else if (action === "close-tile") {
 			const focusedId = tileManager.getFocusedTileId();
@@ -816,6 +833,9 @@ async function init() {
 	}
 
 	window.shellApi.onShortcut(handleShortcut);
+
+	// -- Performance overlay (F3) --
+	initPerfOverlay();
 
 	window.addEventListener("keydown", (event) => {
 		if (!isFocusSearchShortcut(event)) return;
@@ -908,7 +928,7 @@ async function init() {
 					const tile = tileManager.createCanvasTile(
 						"term", cx, cy, { cwd },
 					);
-					tileManager.spawnTerminalWebview(tile, true);
+					tileManager.spawnTerminal(tile, true);
 					tileManager.saveCanvasImmediate();
 				}
 				if (channel === "open-browser-tile") {
@@ -1189,15 +1209,7 @@ async function init() {
 
 	// -- Loading --
 
-	window.shellApi.onLoadingStatus((message) => {
-		loadingStatusEl.textContent = message;
-	});
-
 	window.shellApi.onLoadingDone(() => {
-		loadingOverlay.classList.add("fade-out");
-		setTimeout(() => {
-			loadingOverlay.remove();
-		}, 350);
 		checkFirstLaunchDialog();
 	});
 
@@ -1273,6 +1285,10 @@ async function init() {
 			}
 		});
 	}
+
+	// -- Initialize in-process terminal mode (before tile restore) --
+
+	await tileManager.initInProcessTerminals();
 
 	// -- Restore canvas state --
 

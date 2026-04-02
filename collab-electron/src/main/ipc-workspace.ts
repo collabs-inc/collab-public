@@ -1,8 +1,8 @@
 import {
   app,
+  BrowserWindow,
   ipcMain,
   dialog,
-  type BrowserWindow,
 } from "electron";
 import {
   appendFileSync,
@@ -12,6 +12,7 @@ import {
   existsSync,
 } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
+import path from "node:path";
 import { basename, extname, join } from "node:path";
 import fm from "front-matter";
 import { saveConfig, type AppConfig } from "./config";
@@ -228,6 +229,26 @@ export function registerWorkspaceHandlers(
 
   ipcMain.handle("config:get", () => appConfig);
   ipcMain.handle("app:version", () => app.getVersion());
+  ipcMain.handle("app:restart", (event) => {
+    // Allow the main window and webview guests hosted within it (e.g. settings).
+    // BrowserWindow.fromWebContents returns null for <webview> guest contents,
+    // so we also accept null — IPC is only reachable via our own preload scripts.
+    const mainWin = ctx.mainWindow();
+    if (!mainWin) return;
+    const senderWin = BrowserWindow.fromWebContents(event.sender);
+    if (senderWin !== null && senderWin !== mainWin) return;
+
+    if (app.isPackaged) {
+      app.relaunch();
+      app.quit();
+    } else {
+      // Dev mode: reload all windows to pick up changes without killing
+      // the dev server (app.quit() would terminate the parent process).
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.reloadIgnoringCache();
+      }
+    }
+  });
 
   ipcMain.handle(
     "workspace-pref:get",
@@ -400,11 +421,13 @@ export function registerWorkspaceHandlers(
       _event,
       params: { root: string },
     ): Promise<TreeNode[]> => {
-      return readTreeRecursive(
-        params.root,
-        params.root,
-        fileFilterRef.current,
-      );
+      const resolved = path.resolve(params.root);
+      const workspace = ctx.getActiveWorkspacePath();
+      const resolvedWs = workspace ? path.resolve(workspace) : "";
+      if (!resolvedWs || (resolved !== resolvedWs && !resolved.startsWith(resolvedWs + path.sep))) {
+        throw new Error("Path outside workspace");
+      }
+      return readTreeRecursive(resolved, resolved, fileFilterRef.current);
     },
   );
 
@@ -416,6 +439,12 @@ export function registerWorkspaceHandlers(
       field: string,
       value: unknown,
     ): Promise<{ ok: boolean; retried?: boolean }> => {
+      const resolved = path.resolve(filePath);
+      const workspace = ctx.getActiveWorkspacePath();
+      const resolvedWs = workspace ? path.resolve(workspace) : "";
+      if (!resolvedWs || (resolved !== resolvedWs && !resolved.startsWith(resolvedWs + path.sep))) {
+        throw new Error("Path outside workspace");
+      }
       const MAX_ATTEMPTS = 3;
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         const fileStat = await stat(filePath);

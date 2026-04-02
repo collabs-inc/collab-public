@@ -6,3 +6,6 @@ root = "."
 "@collab/shared" = "packages/shared/src"
 "@collab/components" = "packages/components/src"
 "@collab/theme" = "packages/theme/src"
+
+[install]
+minimumReleaseAge = 604800 # 7 days in seconds

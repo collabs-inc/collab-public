@@ -1,6 +1,7 @@
 import { execFileSync, execFile } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { type TerminalTarget } from "./config";
 import { COLLAB_DIR } from "./paths";
 
 export interface SessionMeta {
@@ -13,7 +14,7 @@ export interface SessionMeta {
   args?: string[];
   cwdHostPath?: string;
   cwdGuestPath?: string;
-  backend?: "tmux" | "sidecar";
+  backend?: "tmux" | "sidecar" | "direct";
 }
 
 export const SESSION_DIR = path.join(
@@ -56,9 +57,9 @@ export function getTmuxConf(): string {
   }
   // Dev mode: resolve from project root.
   // app.getAppPath() returns project root in electron-vite;
-  // fall back to cwd for unit tests.
+  // fall back to the source/output tree so tests don't depend on cwd.
   const app = getApp();
-  const root = app?.getAppPath() ?? process.cwd();
+  const root = app?.getAppPath() ?? path.resolve(__dirname, "..", "..");
   return path.join(root, "resources", "tmux.conf");
 }
 
@@ -70,32 +71,88 @@ export function getTerminfoDir(): string | undefined {
   return undefined;
 }
 
-function baseArgs(): string[] {
-  return ["-L", getSocketName(), "-u", "-f", getTmuxConf()];
+function wslDistro(target: TerminalTarget | undefined): string | null {
+  if (process.platform !== "win32") return null;
+  if (!target?.startsWith("wsl:")) return null;
+  return target.slice(4);
 }
 
-function tmuxEnv(): Record<string, string> | undefined {
+function baseArgs(target?: TerminalTarget): string[] {
+  const args = ["-L", getSocketName(), "-u"];
+  const conf = wslDistro(target) ? null : getTmuxConf();
+  if (conf) {
+    args.push("-f", conf);
+  }
+  return args;
+}
+
+function tmuxEnv(target?: TerminalTarget): Record<string, string> | undefined {
+  if (wslDistro(target)) return undefined;
   const dir = getTerminfoDir();
   if (!dir) return undefined;
   return { ...process.env, TERMINFO: dir } as Record<string, string>;
 }
 
-export function tmuxExec(...args: string[]): string {
+export interface TmuxSpawnSpec {
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+}
+
+export function getTmuxSpawnSpec(
+  target?: TerminalTarget,
+  ...args: string[]
+): TmuxSpawnSpec {
+  const distro = wslDistro(target);
+  if (distro) {
+    return {
+      command: "wsl.exe",
+      args: ["-d", distro, "-e", "tmux", ...baseArgs(target), ...args],
+    };
+  }
+  return {
+    command: getTmuxBin(),
+    args: [...baseArgs(), ...args],
+    env: tmuxEnv(),
+  };
+}
+
+/** WSL cold-starts can take 10-15s; 5s is too tight. */
+const TMUX_EXEC_TIMEOUT_MS = 30_000;
+
+export function tmuxExecForTarget(
+  target: TerminalTarget | undefined,
+  ...args: string[]
+): string {
+  const spec = getTmuxSpawnSpec(target, ...args);
   try {
     return execFileSync(
-      getTmuxBin(), [...baseArgs(), ...args],
-      { encoding: "utf8", timeout: 5000, env: tmuxEnv() },
+      spec.command,
+      spec.args,
+      {
+        encoding: "utf8",
+        timeout: TMUX_EXEC_TIMEOUT_MS,
+        env: spec.env,
+        windowsHide: process.platform === "win32",
+      },
     ).trim();
   } catch (err: unknown) {
     if (isEnoent(err)) {
       const app = getApp();
-      const hint = app?.isPackaged
-        ? "tmux is required for legacy session recovery in packaged builds. Install it and ensure it is on your PATH."
-        : "tmux is required for dev mode. Install it with: brew install tmux";
+      const distro = wslDistro(target);
+      const hint = distro
+        ? `tmux is required inside WSL distro ${distro}. Install it there and ensure it is on PATH.`
+        : app?.isPackaged
+          ? "tmux is required for legacy session recovery in packaged builds. Install it and ensure it is on your PATH."
+          : "tmux is required for dev mode. Install it with: brew install tmux";
       throw new Error(hint);
     }
     throw err;
   }
+}
+
+export function tmuxExec(...args: string[]): string {
+  return tmuxExecForTarget(undefined, ...args);
 }
 
 function isEnoent(err: unknown): boolean {
@@ -107,12 +164,20 @@ function isEnoent(err: unknown): boolean {
 }
 
 export function tmuxExecAsync(
+  target: TerminalTarget | undefined,
   ...args: string[]
 ): Promise<string> {
+  const spec = getTmuxSpawnSpec(target, ...args);
   return new Promise((resolve, reject) => {
     execFile(
-      getTmuxBin(), [...baseArgs(), ...args],
-      { encoding: "utf8", timeout: 5000, env: tmuxEnv() },
+      spec.command,
+      spec.args,
+      {
+        encoding: "utf8",
+        timeout: TMUX_EXEC_TIMEOUT_MS,
+        env: spec.env,
+        windowsHide: process.platform === "win32",
+      },
       (err, stdout) => {
         if (err) return reject(err);
         resolve(stdout.trim());
@@ -129,7 +194,14 @@ function ensureSessionDir(): void {
   fs.mkdirSync(SESSION_DIR, { recursive: true });
 }
 
+const SESSION_ID_RE = /^[0-9a-f]{16}$/;
+function assertSessionId(id: unknown): asserts id is string {
+  if (typeof id !== "string" || !SESSION_ID_RE.test(id))
+    throw new Error("Invalid session ID");
+}
+
 function metaPath(sessionId: string): string {
+  assertSessionId(sessionId);
   return path.join(SESSION_DIR, `${sessionId}.json`);
 }
 

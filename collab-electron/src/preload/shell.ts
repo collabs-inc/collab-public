@@ -46,6 +46,12 @@ contextBridge.exposeInMainWorld("shellApi", {
   setPref: (key: string, value: unknown): Promise<void> =>
     ipcRenderer.invoke("pref:set", key, value),
 
+  getInProcessTerminals: (): Promise<boolean> =>
+    ipcRenderer.invoke("shell:get-in-process-terminals"),
+
+  getGpuRenderer: (): Promise<boolean> =>
+    ipcRenderer.invoke("shell:get-gpu-renderer"),
+
   onForwardToWebview: (
     cb: (target: string, channel: string, ...args: unknown[]) => void,
   ) => {
@@ -220,16 +226,46 @@ contextBridge.exposeInMainWorld("shellApi", {
   markPluginOffered: () =>
     ipcRenderer.invoke("integrations:mark-plugin-offered"),
 
-  ptyKillSession: (sessionId: string): Promise<void> =>
+  ptyCreate: (
+    cwd?: string,
+    cols?: number,
+    rows?: number,
+    target?: string,
+  ) =>
+    ipcRenderer.invoke("pty:create", { cwd, cols, rows, target }),
+
+  ptyReconnect: (sessionId: string, cols: number, rows: number) =>
+    ipcRenderer.invoke("pty:reconnect", { sessionId, cols, rows }),
+
+  ptyReadMeta: (sessionId: string) =>
+    ipcRenderer.invoke("pty:read-meta", sessionId),
+
+  ptyWrite: (sessionId: string, data: string) =>
+    ipcRenderer.invoke("pty:write", { sessionId, data }),
+
+  ptySendRawKeys: (sessionId: string, data: string) =>
+    ipcRenderer.invoke("pty:send-raw-keys", { sessionId, data }),
+
+  ptyResize: (sessionId: string, cols: number, rows: number) =>
+    ipcRenderer.invoke("pty:resize", { sessionId, cols, rows }),
+
+  ptyKill: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke("pty:kill", { sessionId }),
 
-  ptyWrite: (sessionId: string, data: string): Promise<void> =>
-    ipcRenderer.invoke("pty:write", { sessionId, data }),
 
   ptyCapture: (
     sessionId: string, lines?: number,
   ): Promise<string> =>
     ipcRenderer.invoke("pty:capture", { sessionId, lines }),
+
+  onPtyData: (callback: (sessionId: string, data: Uint8Array) => void) => {
+    const handler = (
+      _event: unknown,
+      payload: { sessionId: string; data: Uint8Array },
+    ) => callback(payload.sessionId, payload.data);
+    ipcRenderer.on("pty:data", handler);
+    return () => ipcRenderer.removeListener("pty:data", handler);
+  },
 
   onPtyStatusChanged: (
     cb: (payload: { sessionId: string; foreground: string }) => void,

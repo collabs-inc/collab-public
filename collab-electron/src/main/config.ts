@@ -100,22 +100,64 @@ export function getPref(
   return config.ui[key] ?? null;
 }
 
+/** Known preference keys that may be written via IPC. */
+const ALLOWED_PREF_KEYS = new Set([
+  "theme",
+  "canvasOpacity",
+  "terminalMode",
+  "terminalTarget",
+  "terminalBackend",
+  "inProcessTerminals",
+  "gpuRenderer",
+  "uncapFrameRate",
+  "collab:nav-view-mode",
+  "collab:nav-sort-mode",
+  "collab:nav-tree-sort-mode",
+  "collab:nav-feed-sort-mode",
+]);
+
+/** Key prefixes for dynamically-named prefs (e.g. panel-width-nav). */
+const ALLOWED_PREF_PREFIXES = [
+  "panel-width-",
+  "panel-visible-",
+];
+
+function isAllowedPrefKey(key: string): boolean {
+  if (key.length > 64) return false; // prevent unbounded key growth
+  if (ALLOWED_PREF_KEYS.has(key)) return true;
+  return ALLOWED_PREF_PREFIXES.some((p) => key.startsWith(p));
+}
+
 export function setPref(
   config: AppConfig,
   key: string,
   value: unknown,
 ): void {
+  if (!isAllowedPrefKey(key)) {
+    console.warn(`[config] setPref rejected unknown key: ${key}`);
+    return;
+  }
+  if (key === "__proto__" || key === "constructor" || key === "prototype") return;
   config.ui[key] = value;
   saveConfig(config);
 }
 
 export type TerminalMode = "tmux" | "sidecar";
+export type TerminalBackend = "direct" | "sidecar";
 
 export function getTerminalMode(): TerminalMode {
   if (process.platform !== "darwin") return "sidecar";
   const config = loadConfig();
   const mode = getPref(config, "terminalMode");
   if (mode === "sidecar" || mode === "tmux") return mode;
+  return "sidecar";
+}
+
+export function getTerminalBackend(): TerminalBackend {
+  if (process.platform === "win32") return "direct";
+  const config = loadConfig();
+  const backend = getPref(config, "terminalBackend");
+  if (backend === "direct" || backend === "sidecar") return backend;
   return "sidecar";
 }
 
@@ -131,3 +173,15 @@ export function getTerminalTarget(): TerminalTarget {
   const target = getPref(config, "terminalTarget");
   return isTerminalTarget(target) ? target : "auto";
 }
+
+function getBoolPref(key: string, defaultValue: boolean): boolean {
+  const config = loadConfig();
+  const pref = getPref(config, key);
+  if (pref === true || pref === false) return pref;
+  return defaultValue;
+}
+
+export const getInProcessTerminals = () =>
+  getBoolPref("inProcessTerminals", process.platform === "win32");
+export const getGpuRenderer = () => getBoolPref("gpuRenderer", true);
+export const getUncapFrameRate = () => getBoolPref("uncapFrameRate", false);
