@@ -1178,3 +1178,33 @@ body.platform-win {
 .tile-url-input::placeholder {
 	color: rgba(128, 128, 128, 0.5);
 }
+
+/* ── Drag-drop overlay ── */
+
+#drag-drop-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 1999;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.5);
+	border: 2px dashed rgba(255, 255, 255, 0.4);
+	border-radius: 8px;
+	margin: 8px;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.15s ease;
+}
+
+#drag-drop-overlay.visible {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+#drag-drop-overlay span {
+	color: rgba(255, 255, 255, 0.8);
+	font-family: var(--font-mono);
+	font-size: 14px;
+	font-weight: 500;
+}
