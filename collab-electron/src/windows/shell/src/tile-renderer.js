@@ -187,11 +187,75 @@ export function createTileDOM(tile, callbacks) {
 
   if (urlInput) titleBar.insertBefore(urlInput, btnGroup);
 
+  const labelOverlay = document.createElement("div");
+  labelOverlay.className = "tile-label-overlay";
+
+  const labelIcon = document.createElement("span");
+  labelIcon.className = "tile-label-icon";
+  labelIcon.textContent = TILE_TYPE_ICONS[tile.type] || "";
+
+  const labelTitle = document.createElement("span");
+  labelTitle.className = "tile-label-title";
+  labelTitle.textContent = getTileLabel(tile).name;
+
+  const labelSubtitle = document.createElement("span");
+  labelSubtitle.className = "tile-label-subtitle";
+  labelSubtitle.textContent = getTileSubtitle(tile);
+
+  labelOverlay.appendChild(labelIcon);
+  labelOverlay.appendChild(labelTitle);
+  labelOverlay.appendChild(labelSubtitle);
+
   container.appendChild(titleBar);
   container.appendChild(contentArea);
+  container.appendChild(labelOverlay);
   contentArea.appendChild(contentOverlay);
 
-  return { container, titleBar, titleText, contentArea, contentOverlay, closeBtn, urlInput, navBack, navForward, navReload };
+  return { container, titleBar, titleText, contentArea, contentOverlay, labelOverlay, closeBtn, urlInput, navBack, navForward, navReload };
+}
+
+const TILE_TYPE_ICONS = {
+  term: ">_",
+  code: "{ }",
+  browser: "\u{1F310}",
+  image: "\u{1F5BC}",
+  graph: "\u25C9",
+  note: "\u{1F4DD}",
+};
+
+/**
+ * Returns a subtitle string auto-derived from tile metadata.
+ * @param {import('./canvas-state.js').Tile} tile
+ * @returns {string}
+ */
+export function getTileSubtitle(tile) {
+  if (tile.type === "code" || tile.type === "note") {
+    if (!tile.filePath) return "";
+    const parts = tile.filePath.split("/");
+    const filename = parts.pop() || "";
+    const parent = parts.pop() || "";
+    const ext = filename.includes(".")
+      ? filename.slice(filename.lastIndexOf("."))
+      : "";
+    if (parent) return `${ext} \u2014 ${parent}`;
+    return ext;
+  }
+  if (tile.type === "term") {
+    return tile.cwd || "";
+  }
+  if (tile.type === "browser") {
+    if (!tile.url) return "";
+    try { return new URL(tile.url).hostname; }
+    catch { return tile.url; }
+  }
+  if (tile.type === "graph") {
+    return tile.folderPath || "";
+  }
+  if (tile.type === "image") {
+    if (!tile.filePath) return "";
+    return tile.filePath.split("/").pop() || "";
+  }
+  return "";
 }
 
 export function getTileLabel(tile) {
@@ -232,6 +296,19 @@ export function updateTileTitle(dom, tile) {
   titleText.appendChild(parentSpan);
   titleText.appendChild(nameSpan);
   titleText.title = tile.filePath || tile.folderPath || tile.cwd || "";
+
+  if (dom.labelOverlay) {
+    const labelTitle = dom.labelOverlay.querySelector(
+      ".tile-label-title"
+    );
+    const labelSubtitle = dom.labelOverlay.querySelector(
+      ".tile-label-subtitle"
+    );
+    if (labelTitle) labelTitle.textContent = label.name;
+    if (labelSubtitle) {
+      labelSubtitle.textContent = getTileSubtitle(tile);
+    }
+  }
 }
 
 /**
@@ -253,6 +330,23 @@ export function positionTile(container, tile, panX, panY, zoom) {
   container.style.transform = `scale(${zoom})`;
   container.style.transformOrigin = "top left";
   container.style.zIndex = String(tile.zIndex);
+
+  if (!container.querySelector) return;
+
+  const t = Math.min(1, Math.max(0, (0.5 - zoom) / 0.15));
+  const content = container.querySelector(".tile-content");
+  const labelEl = container.querySelector(".tile-label-overlay");
+  const titleBar = container.querySelector(".tile-title-bar");
+  if (content) content.style.opacity = String(1 - t);
+  if (titleBar) titleBar.style.opacity = String(1 - t);
+  if (labelEl) labelEl.style.opacity = String(t);
+
+  const webview = container.querySelector(
+    ".tile-content webview"
+  );
+  if (webview) {
+    webview.style.visibility = t === 1 ? "hidden" : "visible";
+  }
 }
 
 /**

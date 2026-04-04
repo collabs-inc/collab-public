@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { getTileLabel, splitFilepath, positionTile } from "./tile-renderer.js";
+import { getTileLabel, getTileSubtitle, splitFilepath, positionTile } from "./tile-renderer.js";
 
 // -- splitFilepath --
 
@@ -122,6 +122,73 @@ describe("getTileLabel", () => {
   });
 });
 
+// -- getTileSubtitle --
+
+describe("getTileSubtitle", () => {
+  test("returns extension + parent for code tiles with filePath", () => {
+    const sub = getTileSubtitle({
+      type: "code", id: "t1",
+      filePath: "/Users/me/projects/app/index.ts",
+    });
+    expect(sub).toBe(".ts \u2014 app");
+  });
+
+  test("returns extension only for code tiles with no parent dir", () => {
+    const sub = getTileSubtitle({
+      type: "code", id: "t1",
+      filePath: "index.ts",
+    });
+    expect(sub).toBe(".ts");
+  });
+
+  test("returns empty for code tiles without filePath", () => {
+    expect(getTileSubtitle({ type: "code", id: "t1" })).toBe("");
+  });
+
+  test("returns cwd for terminal tiles", () => {
+    const sub = getTileSubtitle({
+      type: "term", id: "t1", cwd: "/Users/me/projects",
+    });
+    expect(sub).toBe("/Users/me/projects");
+  });
+
+  test("returns empty for terminal tiles without cwd", () => {
+    expect(getTileSubtitle({ type: "term", id: "t1" })).toBe("");
+  });
+
+  test("returns hostname for browser tiles", () => {
+    const sub = getTileSubtitle({
+      type: "browser", id: "t1",
+      url: "https://docs.example.com/page",
+    });
+    expect(sub).toBe("docs.example.com");
+  });
+
+  test("returns empty for browser tiles without url", () => {
+    expect(getTileSubtitle({ type: "browser", id: "t1" })).toBe("");
+  });
+
+  test("returns folderPath for graph tiles", () => {
+    const sub = getTileSubtitle({
+      type: "graph", id: "t1",
+      folderPath: "/Users/me/projects/myapp",
+    });
+    expect(sub).toBe("/Users/me/projects/myapp");
+  });
+
+  test("returns filename for image tiles", () => {
+    const sub = getTileSubtitle({
+      type: "image", id: "t1",
+      filePath: "/photos/cat.png",
+    });
+    expect(sub).toBe("cat.png");
+  });
+
+  test("returns empty for unknown tile types", () => {
+    expect(getTileSubtitle({ type: "unknown", id: "t1" })).toBe("");
+  });
+});
+
 // -- positionTile --
 
 describe("positionTile", () => {
@@ -189,5 +256,84 @@ describe("positionTile", () => {
     // screen y = 300 * 0.75 + 20 = 245
     expect(container.style.left).toBe("160px");
     expect(container.style.top).toBe("245px");
+  });
+});
+
+// -- positionTile zoom crossfade --
+
+describe("positionTile zoom crossfade", () => {
+  function mockDOMContainer() {
+    const contentStyle: Record<string, string> = {};
+    const labelStyle: Record<string, string> = {};
+    const titleBarStyle: Record<string, string> = {};
+    const webviewStyle: Record<string, string> = {};
+    const children: Record<string, any> = {
+      ".tile-content": {
+        style: contentStyle,
+        querySelector: (sel: string) => {
+          if (sel === "webview") return { style: webviewStyle };
+          return null;
+        },
+      },
+      ".tile-label-overlay": { style: labelStyle },
+      ".tile-title-bar": { style: titleBarStyle },
+      ".tile-content webview": { style: webviewStyle },
+    };
+    const style: Record<string, string> = {};
+    return {
+      style,
+      querySelector: (sel: string) => children[sel] || null,
+      _contentStyle: contentStyle,
+      _labelStyle: labelStyle,
+      _titleBarStyle: titleBarStyle,
+      _webviewStyle: webviewStyle,
+    };
+  }
+
+  test("at zoom >= 0.5 content is fully visible, label hidden", () => {
+    const c = mockDOMContainer();
+    const tile = { x: 0, y: 0, width: 100, height: 100, zIndex: 1 };
+    positionTile(c, tile, 0, 0, 0.8);
+    expect(c._contentStyle.opacity).toBe("1");
+    expect(c._labelStyle.opacity).toBe("0");
+    expect(c._titleBarStyle.opacity).toBe("1");
+  });
+
+  test("at zoom <= 0.35 content hidden, label fully visible", () => {
+    const c = mockDOMContainer();
+    const tile = { x: 0, y: 0, width: 100, height: 100, zIndex: 1 };
+    positionTile(c, tile, 0, 0, 0.2);
+    expect(c._contentStyle.opacity).toBe("0");
+    expect(c._labelStyle.opacity).toBe("1");
+    expect(c._titleBarStyle.opacity).toBe("0");
+  });
+
+  test("at zoom 0.425 content and label are half opacity", () => {
+    const c = mockDOMContainer();
+    const tile = { x: 0, y: 0, width: 100, height: 100, zIndex: 1 };
+    positionTile(c, tile, 0, 0, 0.425);
+    expect(parseFloat(c._contentStyle.opacity)).toBeCloseTo(0.5);
+    expect(parseFloat(c._labelStyle.opacity)).toBeCloseTo(0.5);
+  });
+
+  test("webview hidden at zoom <= 0.35", () => {
+    const c = mockDOMContainer();
+    const tile = { x: 0, y: 0, width: 100, height: 100, zIndex: 1 };
+    positionTile(c, tile, 0, 0, 0.3);
+    expect(c._webviewStyle.visibility).toBe("hidden");
+  });
+
+  test("webview visible at zoom > 0.35", () => {
+    const c = mockDOMContainer();
+    const tile = { x: 0, y: 0, width: 100, height: 100, zIndex: 1 };
+    positionTile(c, tile, 0, 0, 0.4);
+    expect(c._webviewStyle.visibility).toBe("visible");
+  });
+
+  test("webview visible at zoom >= 0.5", () => {
+    const c = mockDOMContainer();
+    const tile = { x: 0, y: 0, width: 100, height: 100, zIndex: 1 };
+    positionTile(c, tile, 0, 0, 1.0);
+    expect(c._webviewStyle.visibility).toBe("visible");
   });
 });
