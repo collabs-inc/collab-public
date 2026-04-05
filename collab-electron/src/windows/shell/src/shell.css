@@ -7,6 +7,8 @@
 	--canvas-bg: rgb(230, 230, 230);
 	--canvas-bg-hi: rgb(244, 244, 244);
 	--canvas-bg-rgb: 230, 230, 230;
+	--tile-focus-border-color: rgba(0, 0, 0, 0.5);
+	--tile-focus-border-width: 1px;
 	--canvas-opacity: 0.5;
 	--fg: rgb(32, 32, 32);
 	--border: rgb(206, 206, 206);
@@ -35,6 +37,8 @@
 	--muted: rgb(132, 132, 132);
 	--edge-dot: rgb(72, 210, 130);
 	--edge-dot-hover: rgb(90, 235, 150);
+	--tile-focus-border-color: rgba(255, 255, 255, 0.5);
+	--tile-focus-border-width: 1px;
 }
 
 * {
@@ -821,13 +825,13 @@ body.platform-win {
 
 .canvas-tile.tile-focused {
 	box-shadow:
-		0 0 0 1px rgba(0, 0, 0, 0.5),
+		0 0 0 var(--tile-focus-border-width) var(--tile-focus-border-color),
 		0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 .dark .canvas-tile.tile-focused {
 	box-shadow:
-		0 0 0 1px rgba(255, 255, 255, 0.5),
+		0 0 0 var(--tile-focus-border-width) var(--tile-focus-border-color),
 		0 2px 8px rgba(0, 0, 0, 0.5);
 }
 

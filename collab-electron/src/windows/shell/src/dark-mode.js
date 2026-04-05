@@ -24,3 +24,21 @@ export function applyCanvasOpacity(percent) {
 		String(clamped / 100),
 	);
 }
+
+export function applyTileBorderColor(color) {
+	if (typeof color === "string" && color.trim()) {
+		document.documentElement.style.setProperty(
+			"--tile-focus-border-color",
+			color,
+		);
+	}
+}
+
+export function applyTileBorderWidth(pixels) {
+	const n = Number(pixels);
+	const clamped = Math.max(0, Math.min(4, Number.isNaN(n) ? 1 : n));
+	document.documentElement.style.setProperty(
+		"--tile-focus-border-width",
+		clamped + "px",
+	);
+}

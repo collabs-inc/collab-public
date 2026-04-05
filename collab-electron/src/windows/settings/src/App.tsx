@@ -178,6 +178,8 @@ function ThemeToggle({
 function AppearancePane() {
   const [theme, setTheme] = useState<ThemeMode>("system");
   const [canvasOpacity, setCanvasOpacity] = useState(0);
+  const [tileBorderColor, setTileBorderColor] = useState("#ffffff");
+  const [tileBorderWidth, setTileBorderWidth] = useState(1);
 
   useEffect(() => {
     api.getPref("theme")
@@ -191,6 +193,16 @@ function AppearancePane() {
         if (typeof v === "number") setCanvasOpacity(v);
       })
       .catch(() => { });
+    api.getPref("tileBorderColor")
+      .then((v) => {
+        if (typeof v === "string") setTileBorderColor(v);
+      })
+      .catch(() => { });
+    api.getPref("tileBorderWidth")
+      .then((v) => {
+        if (typeof v === "number") setTileBorderWidth(v);
+      })
+      .catch(() => { });
   }, []);
 
   async function handleThemeChange(mode: ThemeMode) {
@@ -201,6 +213,16 @@ function AppearancePane() {
   async function handleOpacityChange(value: number) {
     setCanvasOpacity(value);
     await api.setPref("canvasOpacity", value);
+  }
+
+  async function handleTileBorderColorChange(color: string) {
+    setTileBorderColor(color);
+    await api.setPref("tileBorderColor", color);
+  }
+
+  async function handleTileBorderWidthChange(value: number) {
+    setTileBorderWidth(value);
+    await api.setPref("tileBorderWidth", value);
   }
 
   return (
@@ -231,6 +253,40 @@ function AppearancePane() {
           value={canvasOpacity}
           onChange={(v) => { void handleOpacityChange(v); }}
         />
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold">Tile</h3>
+        <div className="space-y-3 border-l-2 border-border pl-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">Border color</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {tileBorderColor}
+              </span>
+              <input
+                type="color"
+                value={tileBorderColor}
+                onChange={(e) => { void handleTileBorderColorChange(e.target.value); }}
+                className="h-6 w-6 cursor-pointer rounded border border-border bg-transparent p-0"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Border width</p>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {tileBorderWidth}px
+              </span>
+            </div>
+            <Slider
+              min={0}
+              max={4}
+              value={tileBorderWidth}
+              onChange={(v) => { void handleTileBorderWidthChange(v); }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

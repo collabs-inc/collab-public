@@ -4,7 +4,7 @@ import {
 	selectTile, clearSelection, getSelectedTiles,
 } from "./canvas-state.js";
 import { attachMarquee } from "./tile-interactions.js";
-import { initDarkMode, applyCanvasOpacity } from "./dark-mode.js";
+import { initDarkMode, applyCanvasOpacity, applyTileBorderColor, applyTileBorderWidth } from "./dark-mode.js";
 import { createWebview, isFocusSearchShortcut } from "./webview-factory.js";
 import { createViewport } from "./canvas-viewport.js";
 import { createEdgeIndicators } from "./edge-indicators.js";
@@ -40,6 +40,12 @@ window.shellApi.getPref("canvasOpacity").then((v) => {
 	applyCanvasOpacity(lastCanvasOpacity);
 	broadcastCanvasOpacity();
 });
+window.shellApi.getPref("tileBorderColor").then((v) => {
+	if (v != null) applyTileBorderColor(v);
+});
+window.shellApi.getPref("tileBorderWidth").then((v) => {
+	if (v != null) applyTileBorderWidth(v);
+});
 
 window.shellApi.onPrefChanged((key, value) => {
 	if (key === "canvasOpacity") {
@@ -47,6 +53,8 @@ window.shellApi.onPrefChanged((key, value) => {
 		applyCanvasOpacity(value);
 		broadcastCanvasOpacity();
 	}
+	if (key === "tileBorderColor") applyTileBorderColor(value);
+	if (key === "tileBorderWidth") applyTileBorderWidth(value);
 });
 
 // -- Viewport --
