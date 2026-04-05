@@ -21,6 +21,7 @@
 /** @type {Tile[]} */
 export const tiles = [];
 
+
 let nextZIndex = 1;
 
 const DEFAULT_TILE_SIZES = {
