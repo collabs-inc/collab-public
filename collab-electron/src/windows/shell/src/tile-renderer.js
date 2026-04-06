@@ -333,13 +333,23 @@ export function positionTile(container, tile, panX, panY, zoom) {
 
   if (!container.querySelector) return;
 
-  const t = Math.min(1, Math.max(0, (0.5 - zoom) / 0.15));
+  const t = Math.min(1, Math.max(0, (0.75 - zoom) / 0.25));
   const content = container.querySelector(".tile-content");
   const labelEl = container.querySelector(".tile-label-overlay");
   const titleBar = container.querySelector(".tile-title-bar");
   if (content) content.style.opacity = String(1 - t);
   if (titleBar) titleBar.style.opacity = String(1 - t);
-  if (labelEl) labelEl.style.opacity = String(t);
+  if (labelEl) {
+    labelEl.style.opacity = String(t);
+    const s = 1 / zoom;
+    const icon = labelEl.querySelector(".tile-label-icon");
+    const title = labelEl.querySelector(".tile-label-title");
+    const sub = labelEl.querySelector(".tile-label-subtitle");
+    if (icon) icon.style.fontSize = `${32 * s}px`;
+    if (title) title.style.fontSize = `${18 * s}px`;
+    if (sub) sub.style.fontSize = `${13 * s}px`;
+    labelEl.style.gap = `${8 * s}px`;
+  }
 
   const webview = container.querySelector(
     ".tile-content webview"

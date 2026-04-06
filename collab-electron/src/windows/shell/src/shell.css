@@ -921,14 +921,12 @@ body.platform-win {
 }
 
 .tile-label-icon {
-	font-size: 28px;
 	line-height: 1;
 	user-select: none;
 }
 
 .tile-label-title {
 	font-family: var(--font-mono);
-	font-size: 14px;
 	font-weight: 600;
 	color: var(--fg);
 	text-align: center;
@@ -940,7 +938,6 @@ body.platform-win {
 
 .tile-label-subtitle {
 	font-family: var(--font-mono);
-	font-size: 11px;
 	font-weight: 400;
 	color: var(--muted);
 	text-align: center;
