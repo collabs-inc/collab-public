@@ -862,9 +862,9 @@ body.platform-win {
 /* ── Zoom-level tile label overlay ── */
 
 .tile-label-overlay {
+	display: none;
 	position: absolute;
 	inset: 0;
-	display: flex;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
@@ -898,8 +898,6 @@ body.platform-win {
 	color: var(--muted);
 	text-align: center;
 	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 	max-width: 100%;
 }
 

@@ -226,8 +226,8 @@ export function createTileDOM(tile, callbacks) {
 
   container.appendChild(titleBar);
   container.appendChild(contentArea);
-  container.appendChild(labelOverlay);
   contentArea.appendChild(contentOverlay);
+  container.appendChild(labelOverlay);
 
   return { container, titleBar, titleText, contentArea, contentOverlay, labelOverlay, closeBtn, urlInput, navBack, navForward, navReload };
 }
@@ -407,26 +407,19 @@ export function positionTile(container, tile, panX, panY, zoom) {
   const content = container.querySelector(".tile-content");
   const labelEl = container.querySelector(".tile-label-overlay");
   const titleBar = container.querySelector(".tile-title-bar");
-  if (content) content.style.opacity = String(1 - t);
-  if (titleBar) titleBar.style.opacity = String(1 - t);
   if (labelEl) {
     labelEl.style.opacity = String(t);
     const s = 1 / zoom;
     const icon = labelEl.querySelector(".tile-label-icon");
     const title = labelEl.querySelector(".tile-label-title");
     const sub = labelEl.querySelector(".tile-label-subtitle");
-    if (icon) icon.style.fontSize = `${32 * s}px`;
-    if (title) title.style.fontSize = `${18 * s}px`;
-    if (sub) sub.style.fontSize = `${13 * s}px`;
-    labelEl.style.gap = `${8 * s}px`;
+    if (icon) icon.style.fontSize = `${14 * s}px`;
+    if (title) title.style.fontSize = `${12 * s}px`;
+    if (sub) sub.style.fontSize = `${11 * s}px`;
+    labelEl.style.gap = `${4 * s}px`;
+    labelEl.style.padding = `${6 * s}px`;
   }
 
-  const webview = container.querySelector(
-    ".tile-content webview"
-  );
-  if (webview) {
-    webview.style.visibility = t === 1 ? "hidden" : "visible";
-  }
 }
 
 /**
