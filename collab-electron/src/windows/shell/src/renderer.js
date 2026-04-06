@@ -1045,6 +1045,21 @@ async function init() {
 						break;
 					}
 				}
+			} else if (event.channel === "terminal-list:focus-tile") {
+				const sessionId = event.args[0];
+				for (const [id] of tileManager.getTileDOMs()) {
+					const tile = getTile(id);
+					if (
+						tile?.type === "term" &&
+						tile.ptySessionId === sessionId
+					) {
+						edgeIndicators.panToTile(tile);
+						tileManager.focusCanvasTile(id);
+						break;
+					}
+				}
+			} else if (event.channel === "terminal-list:blur") {
+				focusSurface("canvas");
 			}
 		},
 	);

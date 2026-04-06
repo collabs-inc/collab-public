@@ -143,7 +143,7 @@ function App() {
           <div
             key={entry.tileId}
             className={classes}
-            onClick={() => peekTile(entry.sessionId)}
+            onClick={() => focusTile(entry.sessionId)}
           >
             <div className={`status-dot ${stateClass}`} />
             <div className="entry-info">

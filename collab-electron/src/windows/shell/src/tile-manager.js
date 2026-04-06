@@ -176,6 +176,21 @@ export function createTileManager({
 				tile.type !== "browser"
 			) {
 				forwardClickToWebview(dom.webview, mouseEvent);
+			} else if (!mouseEvent && tile.type === "term") {
+				// Programmatic focus (e.g. from terminal list) —
+				// simulate a click in the center so xterm grabs focus
+				setTimeout(() => {
+					try {
+						const x = Math.round(dom.webview.offsetWidth / 2);
+						const y = Math.round(dom.webview.offsetHeight / 2);
+						dom.webview.sendInputEvent({
+							type: "mouseDown", x, y, button: "left", clickCount: 1,
+						});
+						dom.webview.sendInputEvent({
+							type: "mouseUp", x, y, button: "left", clickCount: 1,
+						});
+					} catch { /* noop */ }
+				}, 100);
 			}
 		}
 	}
