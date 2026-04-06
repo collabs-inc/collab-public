@@ -8,12 +8,12 @@ import { initDarkMode, applyCanvasOpacity } from "./dark-mode.js";
 import { createWebview, isFocusSearchShortcut } from "./webview-factory.js";
 import { createViewport } from "./canvas-viewport.js";
 import { createEdgeIndicators } from "./edge-indicators.js";
+import { createMinimap } from "./canvas-minimap.js";
 import { createPanel } from "./panel-manager.js";
 import { createWorkspaceManager } from "./workspace-manager.js";
 import { createCanvasRpc } from "./canvas-rpc.js";
 import { createTileManager } from "./tile-manager.js";
-import { updateTileTitle } from "./tile-renderer.js";
-import { normalizeCommandName } from "@collab/shared/path-utils";
+import { updateTileTitle, getTileLabel } from "./tile-renderer.js";
 
 const CANVAS_DBLCLICK_SUPPRESS_MS = 500;
 const IS_WINDOWS = window.shellApi.getPlatform() === "win32";
@@ -26,6 +26,13 @@ canvasEl.tabIndex = -1;
 
 document.documentElement.classList.toggle("platform-win", IS_WINDOWS);
 document.body.classList.toggle("platform-win", IS_WINDOWS);
+
+// -- Alpha banner dismiss --
+
+document.getElementById("alpha-dismiss").addEventListener("click", (e) => {
+	e.preventDefault();
+	document.getElementById("alpha-label").hidden = true;
+});
 
 // -- Dark mode --
 
@@ -73,32 +80,50 @@ function toCenterPointState(state) {
 async function init() {
 	const [
 		configs, workspaceData,
-		prefNavWidth, prefNavVisible,
-		prefTermWidth, prefTermVisible,
+		prefNavWidth, prefSidebarMode,
+		prefAgentWidth, prefAgentMode,
+		prefAgentPty,
+		prefLastTerminalCwd,
+		prefLastTerminalSize,
 	] = await Promise.all([
 		window.shellApi.getViewConfig(),
 		window.shellApi.workspaceList(),
 		window.shellApi.getPref("panel-width-nav"),
-		window.shellApi.getPref("panel-visible-nav"),
-		window.shellApi.getPref("panel-width-terminal"),
-		window.shellApi.getPref("panel-visible-terminal"),
+		window.shellApi.getPref("sidebar-mode"),
+		window.shellApi.getPref("panel-width-agent"),
+		window.shellApi.getPref("sidebar-mode-agent"),
+		window.shellApi.getPref("agent-pty-session"),
+		window.shellApi.getPref("lastTerminalCwd"),
+		window.shellApi.getPref("lastTerminalSize"),
 	]);
+
+	let lastTerminalCwd = prefLastTerminalCwd || null;
+	let lastTerminalSize = prefLastTerminalSize || null;
+
+	function getTerminalCwd() {
+		return lastTerminalCwd || workspaceData.workspaces[0];
+	}
+
+	function setLastTerminalCwd(cwd) {
+		lastTerminalCwd = cwd;
+		window.shellApi.setPref("lastTerminalCwd", cwd);
+	}
+
+	function getTerminalSize() {
+		if (lastTerminalSize) return { ...lastTerminalSize };
+		return defaultSize("term");
+	}
+
+	function setLastTerminalSize(width, height) {
+		lastTerminalSize = { width, height };
+		window.shellApi.setPref("lastTerminalSize", lastTerminalSize);
+	}
 
 	// DOM elements
 	const panelNav = document.getElementById("panel-nav");
 	const panelViewer = document.getElementById("panel-viewer");
 	const navResizeHandle = document.getElementById("nav-resize");
 	const navToggle = document.getElementById("nav-toggle");
-	const workspaceTrigger =
-		document.getElementById("workspace-trigger");
-	const workspaceTriggerParent =
-		document.getElementById("workspace-trigger-parent");
-	const workspaceTriggerName =
-		document.getElementById("workspace-trigger-name");
-	const workspaceMenuItems =
-		document.getElementById("workspace-menu-items");
-	const wsAddOption =
-		document.getElementById("ws-add-option");
 	const settingsOverlay =
 		document.getElementById("settings-overlay");
 	const settingsBackdrop =
@@ -113,12 +138,9 @@ async function init() {
 	const loadingStatusEl =
 		document.getElementById("loading-status");
 	const tileLayer = document.getElementById("tile-layer");
-	const panelTerminal =
-		document.getElementById("panel-terminal");
-	const terminalResizeHandle =
-		document.getElementById("terminal-resize");
-	const terminalToggle =
-		document.getElementById("terminal-toggle");
+	const panelAgent = document.getElementById("panel-agent");
+	const agentResizeHandle = document.getElementById("agent-resize");
+	const agentToggle = document.getElementById("agent-toggle");
 
 	// -- State --
 
@@ -170,7 +192,7 @@ async function init() {
 	singletonViewer.setBeforeInput((event, detail) => {
 		if (!isFocusSearchShortcut(detail)) return;
 		event.preventDefault();
-		handleShortcut("focus-search");
+		handleShortcut("focus-file-search");
 	});
 
 	const singletonWebviews = {
@@ -183,11 +205,6 @@ async function init() {
 		noteSurfaceFocus("settings");
 	});
 
-	const terminalListWebview = createWebview(
-		"terminal-list", configs.terminalList,
-		panelTerminal, handleDndMessage,
-	);
-
 	// -- Panel manager --
 
 	const panelManager = createPanel("nav", {
@@ -196,95 +213,309 @@ async function init() {
 		label: "Navigator",
 		defaultWidth: 280,
 		direction: 1,
+		validModes: ["closed", "files", "tiles"],
+		prefKey: "sidebar-mode",
 		getAllWebviews,
 		onVisibilityChanged(visible) {
+			panelViewer.classList.toggle("nav-open", visible);
 			if (visible) {
 				requestAnimationFrame(() => {
 					singletonViewer.send("nav-visibility", true);
 				});
 			} else {
 				singletonViewer.send("nav-visibility", false);
+				canvasEl.focus();
+			}
+		},
+		onModeChanged(mode) {
+			updateSidebarContent(mode);
+			updateSegmentedControl(mode);
+		},
+	});
+	panelManager.initPrefs(prefNavWidth, prefSidebarMode);
+
+	let agentTermWebview = null;
+	let agentPtySessionId = prefAgentPty || null;
+
+	function ensureAgentTerminal() {
+		if (agentTermWebview) return;
+
+		const termConfig = configs.terminalTile;
+		const params = new URLSearchParams();
+		params.set("tileId", "agent");
+
+		if (agentPtySessionId) {
+			params.set("sessionId", agentPtySessionId);
+			params.set("restored", "1");
+		} else {
+			const homeDir = window.shellApi.getHomePath?.() || "~";
+			params.set("cwd", `${homeDir}/.collaborator`);
+		}
+
+		const qs = params.toString();
+		const wv = document.createElement("webview");
+		wv.setAttribute(
+			"src", `${termConfig.src}?${qs}`,
+		);
+		wv.setAttribute("preload", termConfig.preload);
+		wv.setAttribute(
+			"webpreferences", "contextIsolation=yes, sandbox=yes",
+		);
+		wv.style.flex = "1";
+		wv.style.border = "none";
+
+		let ready = false;
+		const pendingMessages = [];
+
+		wv.addEventListener("dom-ready", () => {
+			ready = true;
+			for (const [ch, args] of pendingMessages) {
+				wv.send(ch, ...args);
+			}
+			pendingMessages.length = 0;
+			if (agentPanel.isVisible()) {
+				wv.focus();
+				noteSurfaceFocus("agent");
+			}
+		});
+
+		wv.addEventListener("ipc-message", (event) => {
+			if (event.channel === "pty-session-id") {
+				agentPtySessionId = event.args[0];
+				window.shellApi.setPref(
+					"agent-pty-session", agentPtySessionId,
+				);
+			}
+		});
+
+		wv.addEventListener("console-message", (event) => {
+			window.shellApi.logFromWebview(
+				"agent-term", event.level, event.message, event.sourceId,
+			);
+		});
+
+		wv.addEventListener("focus", () => {
+			noteSurfaceFocus("agent");
+		});
+
+		panelAgent.appendChild(wv);
+		agentTermWebview = {
+			webview: wv,
+			send(ch, ...args) {
+				if (ready) wv.send(ch, ...args);
+				else pendingMessages.push([ch, args]);
+			},
+		};
+	}
+
+	const agentPanel = createPanel("agent", {
+		panel: panelAgent,
+		resizeHandle: agentResizeHandle,
+		toggle: agentToggle,
+		label: "Agent",
+		defaultWidth: 400,
+		direction: -1,
+		validModes: ["closed", "open"],
+		defaultMode: "closed",
+		prefKey: "sidebar-mode-agent",
+		getAllWebviews,
+		onVisibilityChanged(visible) {
+			panelViewer.classList.toggle("agent-open", visible);
+			if (visible) {
+				ensureAgentTerminal();
+				if (agentTermWebview) {
+					agentTermWebview.webview.focus();
+					noteSurfaceFocus("agent");
+				}
+			} else {
+				canvasEl.focus();
 			}
 		},
 	});
-	panelManager.initPrefs(prefNavWidth, prefNavVisible);
-
-	const terminalPanel = createPanel("terminal", {
-		panel: panelTerminal,
-		resizeHandle: terminalResizeHandle,
-		toggle: terminalToggle,
-		label: "Terminals",
-		defaultWidth: 240,
-		direction: -1,
-		getAllWebviews,
-	});
-	terminalPanel.initPrefs(prefTermWidth, prefTermVisible);
+	// agentPanel.initPrefs deferred until after tileManager (getAllWebviews references it)
 
 	function syncTerminalTileMeta(tile, meta) {
 		if (!meta) return;
 		tile.cwd = meta.cwdHostPath || meta.cwd || tile.cwd;
-		tile.displayName = meta.displayName || tile.displayName;
+		tile.autoTitle = meta.cwdHostPath || meta.cwd || tile.autoTitle;
 		const dom = tileManager.getTileDOMs().get(tile.id);
 		if (dom) {
 			updateTileTitle(dom, tile);
 		}
 	}
 
-	function buildTerminalListEntry(tile, meta) {
-		if (!tile?.ptySessionId || !meta) return null;
+	function buildTileListEntry(tile) {
+		let title = tile.id;
+		let description = "";
+		let status = null;
+
+		if (tile.type === "term") {
+			const label = getTileLabel(tile);
+			title = label.parent
+				? label.parent + label.name
+				: label.name;
+			description = tile.cwd || "~";
+			status = tile.ptySessionId ? "running" : "idle";
+		} else if (tile.type === "browser") {
+			title = tile.url || "Browser";
+			description = "Browser";
+		} else if (tile.type === "graph") {
+			title = "Graph";
+			description = tile.folderPath || "Graph";
+		} else if (tile.type === "note") {
+			title = tile.filePath
+				? tile.filePath.split("/").pop() || "Note"
+				: "Note";
+			description = "Note";
+		} else if (tile.type === "code") {
+			title = tile.filePath
+				? tile.filePath.split("/").pop() || "Code"
+				: "Code";
+			description = "Code";
+		} else if (tile.type === "image") {
+			title = tile.filePath
+				? tile.filePath.split("/").pop() || "Image"
+				: "Image";
+			description = "Image";
+		}
+
 		return {
-			sessionId: tile.ptySessionId,
-			displayName: meta.displayName || "Terminal",
-			commandName: normalizeCommandName(
-				meta.command || meta.shell || "shell",
-			) || "shell",
-			cwd: meta.cwdHostPath || meta.cwd || tile.cwd || "~",
-			foreground: null,
-			tileId: tile.id,
+			id: tile.id, type: tile.type,
+			title, description, status,
 		};
 	}
 
-	// -- Workspace manager --
+	// -- File tree webview --
 
-	const workspaceManager = createWorkspaceManager({
-		panelNav, workspaceMenuItems,
-		workspaceTriggerParent, workspaceTriggerName,
-		configs, createWebview, handleDndMessage,
-		onNoteSurfaceFocus: noteSurfaceFocus,
-		onSwitch(index) {
-			window.shellApi.workspaceSwitch(index);
-		},
-		onApplyNavVisibility() {
-			panelManager.applyVisibility();
-		},
+	const fileTreeContainer = document.createElement("div");
+	fileTreeContainer.id = "file-tree-container";
+	fileTreeContainer.style.display = "flex";
+	fileTreeContainer.style.flex = "1";
+	fileTreeContainer.style.minHeight = "0";
+	panelNav.appendChild(fileTreeContainer);
+	const navWebview = createWebview(
+		"nav", configs.nav, fileTreeContainer, handleDndMessage,
+	);
+	navWebview.webview.addEventListener("focus", () => {
+		noteSurfaceFocus("nav");
 	});
 
-	// Forward canvas opacity to all nav webviews
+	const tileListContainer = document.createElement("div");
+	tileListContainer.id = "tile-list-container";
+	tileListContainer.style.display = "none";
+	tileListContainer.style.flex = "1";
+	tileListContainer.style.minHeight = "0";
+	panelNav.appendChild(tileListContainer);
+
+	const tileListWebview = createWebview(
+		"tile-list", configs.tileList,
+		tileListContainer, handleDndMessage,
+	);
+
+	function updateSidebarContent(mode) {
+		fileTreeContainer.style.display =
+			mode === "files" ? "flex" : "none";
+		tileListContainer.style.display =
+			mode === "tiles" ? "flex" : "none";
+	}
+	updateSidebarContent(panelManager.getMode());
+
+	const modeButtons =
+		document.querySelectorAll(".mode-btn");
+
+	function updateSegmentedControl(mode) {
+		for (const btn of modeButtons) {
+			btn.classList.toggle(
+				"active", btn.dataset.mode === mode,
+			);
+		}
+	}
+
+	for (const btn of modeButtons) {
+		btn.addEventListener("click", () => {
+			const targetMode = btn.dataset.mode;
+			if (
+				targetMode === "files" ||
+				targetMode === "tiles"
+			) {
+				panelManager.setMode(targetMode);
+			}
+		});
+	}
+
+	updateSegmentedControl(panelManager.getMode());
+
+	const workspaceManager = createWorkspaceManager({
+		navWebview,
+	});
+
+	// Forward canvas opacity to nav webview
 	broadcastCanvasOpacity = () => {
 		if (lastCanvasOpacity == null) return;
-		const opacity = Math.max(0, Math.min(100, Number(lastCanvasOpacity) || 0)) / 100;
-		for (const nav of workspaceManager.getAllNavWebviews()) {
-			nav.send("canvas-opacity", opacity);
+		const opacity = Math.max(
+			0, Math.min(
+				100, Number(lastCanvasOpacity) || 0,
+			),
+		) / 100;
+		workspaceManager.getNavWebview().send(
+			"canvas-opacity", opacity,
+		);
+		tileListWebview.send("canvas-opacity", opacity);
+		if (agentTermWebview) {
+			agentTermWebview.send("canvas-opacity", opacity);
 		}
-		terminalListWebview.send("canvas-opacity", opacity);
 	};
 	broadcastCanvasOpacity();
 
+	// -- Tile list sync --
+
+	let lastTileSnapshot = new Map();
+
+	function syncTileList() {
+		const currentIds = new Set();
+		for (const [id] of tileManager.getTileDOMs()) {
+			const tile = getTile(id);
+			if (!tile) continue;
+			currentIds.add(id);
+			const entry = buildTileListEntry(tile);
+			const prev = lastTileSnapshot.get(id);
+			if (!prev || prev.title !== entry.title ||
+				prev.description !== entry.description ||
+				prev.status !== entry.status) {
+				tileListWebview.send(
+					prev ? "tile-list:update" : "tile-list:add",
+					entry,
+				);
+			}
+			lastTileSnapshot.set(id, entry);
+		}
+		for (const id of lastTileSnapshot.keys()) {
+			if (!currentIds.has(id)) {
+				tileListWebview.send("tile-list:remove", id);
+				lastTileSnapshot.delete(id);
+			}
+		}
+	}
+
 	// -- Tile manager --
 
+	let minimapRef = null;
 	const tileManager = createTileManager({
 		tileLayer, viewportState, configs,
 		getAllWebviews,
 		isSpaceHeld: () => spaceHeld,
+		onReposition: () => minimapRef?.update(),
 		onSaveDebounced(state) {
 			window.shellApi.canvasSaveState(
 				toCenterPointState(state),
 			);
+			syncTileList();
 		},
 		onSaveImmediate(state) {
 			window.shellApi.canvasSaveState(
 				toCenterPointState(state),
 			);
+			syncTileList();
 		},
 		onNoteSurfaceFocus: noteSurfaceFocus,
 		onFocusSurface: focusSurface,
@@ -295,20 +526,21 @@ async function init() {
 				(entry) => entry.sessionId === tile.ptySessionId,
 			);
 			syncTerminalTileMeta(tile, session?.meta);
-			const entry = buildTerminalListEntry(tile, session?.meta);
-			if (entry) {
-				terminalListWebview.send("terminal-list:add", entry);
-			}
+			tileManager.saveCanvasDebounced();
+			syncTileList();
 		},
-		onTerminalTileClosed(sessionId) {
-			terminalListWebview.send(
-				"terminal-list:remove", sessionId,
-			);
+		onTerminalCwdChanged(cwd) {
+			setLastTerminalCwd(cwd);
+		},
+		onTerminalTileResized(width, height) {
+			setLastTerminalSize(width, height);
+		},
+		onTerminalTileClosed() {
+			syncTileList();
 		},
 		onTileFocused(tile) {
-			terminalListWebview.send(
-				"terminal-list:focus",
-				tile?.ptySessionId || null,
+			tileListWebview.send(
+				"tile-list:focus", tile?.id || null,
 			);
 		},
 		onTileDblClick(tile) {
@@ -329,11 +561,21 @@ async function init() {
 		},
 	});
 
+	// -- Minimap --
+
+	const minimap = createMinimap({
+		viewportEl: canvasEl,
+		wrapperEl: document.getElementById("minimap-wrapper"),
+		viewportState,
+		getTiles: () => tiles,
+		viewport,
+	});
+	minimapRef = minimap;
+
 	// -- Canvas RPC --
 
 	const handleCanvasRpc = createCanvasRpc({
-		tileManager, viewportState, viewport, workspaceManager,
-		edgeIndicators,
+		tileManager, viewportState, viewport, edgeIndicators,
 	});
 
 	// -- Wire viewport updates --
@@ -341,10 +583,19 @@ async function init() {
 	viewport.init(viewportState, () => {
 		tileManager.repositionAllTiles();
 		edgeIndicators.update();
+		minimap.update();
 		tileManager.saveCanvasDebounced();
 	});
 
 	edgeIndicators.update();
+	minimap.update();
+
+	// -- Agent panel init (after tileManager, since getAllWebviews references it) --
+
+	agentPanel.initPrefs(prefAgentWidth, prefAgentMode);
+	agentPanel.setupResize(() => {
+		agentPanel.updateTogglePosition();
+	});
 
 	// -- Surface focus management --
 
@@ -386,17 +637,17 @@ async function init() {
 		}
 		if (
 			surface === "nav" &&
-			!(panelManager.isVisible() &&
-				workspaceManager.getActiveWorkspace())
+			!panelManager.isVisible()
 		) {
 			surface = null;
 		}
+		if (surface === "agent" && !agentPanel.isVisible()) {
+			surface = null;
+		}
+		if (surface === "agent") return "agent";
 		if (surface === "viewer") return "viewer";
 		if (surface === "nav") return "nav";
-		if (
-			panelManager.isVisible() &&
-			workspaceManager.getActiveWorkspace()
-		) return "nav";
+		if (panelManager.isVisible()) return "nav";
 		if (isViewerVisible()) return "viewer";
 		return "canvas";
 	}
@@ -415,6 +666,12 @@ async function init() {
 			}
 		}
 
+		if (surface === "agent" && agentTermWebview && agentPanel.isVisible()) {
+			agentTermWebview.webview.focus();
+			noteSurfaceFocus("agent");
+			return;
+		}
+
 		requestAnimationFrame(() => {
 			window.focus();
 			if (surface === "settings") {
@@ -423,9 +680,8 @@ async function init() {
 				return;
 			}
 			const resolved = resolveSurface(surface);
-			const workspace = workspaceManager.getActiveWorkspace();
-			if (resolved === "nav" && workspace) {
-				workspace.nav.webview.focus();
+			if (resolved === "nav") {
+				workspaceManager.getNavWebview().webview.focus();
 				noteSurfaceFocus("nav");
 				return;
 			}
@@ -443,30 +699,26 @@ async function init() {
 		const panelsEl = document.getElementById("panels");
 		panelsEl.inert = inert;
 		navToggle.inert = inert;
-		workspaceTrigger.inert = inert;
-		wsAddOption.inert = inert;
+		agentToggle.inert = inert;
 	}
 
 	function blurNonModalSurfaces() {
 		canvasEl.blur();
 		navToggle.blur();
-		workspaceTrigger.blur();
+		agentToggle.blur();
 		singletonViewer.webview.blur();
-		for (const ws of workspaceManager.getWorkspaces()) {
-			ws.nav.webview.blur();
-		}
+		workspaceManager.getNavWebview().webview.blur();
+		if (agentTermWebview) agentTermWebview.webview.blur();
 	}
 
 	// -- getAllWebviews aggregator --
 
 	function getAllWebviews() {
-		const all = [];
-		for (const wv of workspaceManager.getAllNavWebviews()) {
-			all.push(wv);
-		}
+		const all = [workspaceManager.getNavWebview()];
 		all.push(singletonViewer);
-		all.push(terminalListWebview);
+		all.push(tileListWebview);
 		all.push(singletonWebviews.settings);
+		if (agentTermWebview) all.push(agentTermWebview);
 		for (const [, dom] of tileManager.getTileDOMs()) {
 			if (dom.webview) {
 				all.push({
@@ -508,13 +760,14 @@ async function init() {
 		const cx = (screenX - viewportState.panX) / viewportState.zoom;
 		const cy = (screenY - viewportState.panY) / viewportState.zoom;
 
-		const ws = workspaceManager.getActiveWorkspace();
-		const cwd = ws ? ws.path : undefined;
+		const cwd = getTerminalCwd();
+		const size = getTerminalSize();
 		const tile = tileManager.createCanvasTile(
-			"term", cx, cy, { cwd },
+			"term", cx, cy, { cwd, ...size },
 		);
 		tileManager.spawnTerminalWebview(tile, true);
 		tileManager.saveCanvasImmediate();
+		minimap.update();
 	});
 
 	// -- Right-click context menu --
@@ -538,38 +791,21 @@ async function init() {
 		]);
 
 		if (selected === "new-terminal") {
-			const ws = workspaceManager.getActiveWorkspace();
-			const cwd = ws ? ws.path : undefined;
+			const cwd = getTerminalCwd();
+			const size = getTerminalSize();
 			const tile = tileManager.createCanvasTile(
-				"term", cx, cy, { cwd },
+				"term", cx, cy, { cwd, ...size },
 			);
 			tileManager.spawnTerminalWebview(tile, true);
 			tileManager.saveCanvasImmediate();
+			minimap.update();
 		} else if (selected === "new-browser") {
 			const tile = tileManager.createCanvasTile(
 				"browser", cx, cy,
 			);
 			tileManager.spawnBrowserWebview(tile, true);
 			tileManager.saveCanvasImmediate();
-		}
-	});
-
-	// -- Workspace dropdown --
-
-	workspaceTrigger.addEventListener("click", () => {
-		if (workspaceManager.isDropdownOpen()) {
-			workspaceManager.closeDropdown();
-		} else {
-			workspaceManager.openDropdown();
-		}
-	});
-
-	document.addEventListener("click", (e) => {
-		if (!workspaceManager.isDropdownOpen()) return;
-		const dropdown =
-			document.getElementById("workspace-dropdown");
-		if (!dropdown.contains(e.target)) {
-			workspaceManager.closeDropdown();
+			minimap.update();
 		}
 	});
 
@@ -577,22 +813,6 @@ async function init() {
 		if (!settingsModalOpen) return;
 		if (settingsOverlay.contains(event.target)) return;
 		focusSurface("settings");
-	});
-
-	wsAddOption.addEventListener("click", async () => {
-		workspaceManager.closeDropdown();
-		const result = await window.shellApi.workspaceAdd();
-		if (!result) return;
-
-		const { workspaces: wsList, active } = result;
-		if (
-			workspaceManager.getWorkspaces().length < wsList.length
-		) {
-			const newPath = wsList[wsList.length - 1];
-			workspaceManager.addWorkspace(newPath);
-			broadcastCanvasOpacity();
-		}
-		workspaceManager.switchWorkspace(active);
 	});
 
 	// -- Marquee selection --
@@ -654,6 +874,7 @@ async function init() {
 				}
 				clearSelection();
 				tileManager.syncSelectionVisuals();
+				minimap.update();
 			});
 		}
 	});
@@ -757,17 +978,6 @@ async function init() {
 
 	// -- Shortcuts --
 
-	function focusActiveNavSearch() {
-		const workspace = workspaceManager.getActiveWorkspace();
-		if (!workspace) return;
-		focusSurface("nav");
-		requestAnimationFrame(() => {
-			requestAnimationFrame(() => {
-				workspace.nav.send("focus-search");
-			});
-		});
-	}
-
 	function handleShortcut(action) {
 		if (settingsModalOpen && action !== "toggle-settings") {
 			focusSurface("settings");
@@ -775,35 +985,40 @@ async function init() {
 		}
 		if (action === "toggle-settings") {
 			window.shellApi.toggleSettings();
-		} else if (action === "toggle-nav") {
-			panelManager.toggle();
-		} else if (action === "focus-search") {
-			if (workspaceManager.getActiveWorkspace()) {
-				if (!panelManager.isVisible()) {
-					panelManager.setVisible(true);
-				}
-				focusActiveNavSearch();
-			}
+		} else if (action === "sidebar-files") {
+			panelManager.toggleToMode("files");
+		} else if (action === "sidebar-tiles") {
+			panelManager.toggleToMode("tiles");
+		} else if (action === "toggle-agent") {
+			agentPanel.toggle();
+		} else if (action === "focus-file-search") {
+			panelManager.setMode("files");
+			focusSurface("nav");
+			requestAnimationFrame(() => {
+				requestAnimationFrame(() => {
+					workspaceManager.getNavWebview().send(
+						"focus-search",
+					);
+				});
+			});
 		} else if (action === "add-workspace") {
-			wsAddOption.click();
-		} else if (action === "toggle-terminal-list") {
-			terminalPanel.toggle();
+			window.shellApi.workspaceAdd();
 		} else if (action === "new-tile") {
 			const rect = canvasEl.getBoundingClientRect();
-			const size = defaultSize("term");
+			const size = getTerminalSize();
 			const cx =
 				(rect.width / 2 - viewportState.panX) /
 				viewportState.zoom - size.width / 2;
 			const cy =
 				(rect.height / 2 - viewportState.panY) /
 				viewportState.zoom - size.height / 2;
-			const ws = workspaceManager.getActiveWorkspace();
-			const cwd = ws ? ws.path : undefined;
+			const cwd = getTerminalCwd();
 			const tile = tileManager.createCanvasTile(
-				"term", cx, cy, { cwd },
+				"term", cx, cy, { cwd, ...size },
 			);
 			tileManager.spawnTerminalWebview(tile, true);
 			tileManager.saveCanvasImmediate();
+			minimap.update();
 		} else if (action === "close-tile") {
 			const focusedId = tileManager.getFocusedTileId();
 			if (focusedId) {
@@ -811,6 +1026,7 @@ async function init() {
 				tileManager.setFocusedTileId(null);
 				canvasEl.focus();
 				noteSurfaceFocus("canvas");
+				minimap.update();
 			}
 		}
 	}
@@ -820,7 +1036,7 @@ async function init() {
 	window.addEventListener("keydown", (event) => {
 		if (!isFocusSearchShortcut(event)) return;
 		event.preventDefault();
-		handleShortcut("focus-search");
+		handleShortcut("focus-file-search");
 	});
 
 	window.addEventListener("keydown", (event) => {
@@ -855,8 +1071,7 @@ async function init() {
 			if (target === "settings") {
 				singletonWebviews.settings.send(channel, ...args);
 			} else if (target === "nav") {
-				const ws = workspaceManager.getActiveWorkspace();
-				if (ws) ws.nav.send(channel, ...args);
+				workspaceManager.getNavWebview().send(channel, ...args);
 			} else if (
 				target === "viewer" ||
 				target.startsWith("viewer:")
@@ -879,6 +1094,7 @@ async function init() {
 				}
 				if (channel === "files-deleted") {
 					tileManager.closeTilesForDeletedPaths(args[0]);
+					minimap.update();
 				}
 				if (channel !== "workspace-changed") {
 					singletonViewer.send(channel, ...args);
@@ -897,7 +1113,8 @@ async function init() {
 			} else if (target === "canvas") {
 				if (channel === "open-terminal") {
 					const cwd = args[0];
-					const size = defaultSize("term");
+					setLastTerminalCwd(cwd);
+					const size = getTerminalSize();
 					const rect = canvasEl.getBoundingClientRect();
 					const cx =
 						(rect.width / 2 - viewportState.panX) /
@@ -906,10 +1123,11 @@ async function init() {
 						(rect.height / 2 - viewportState.panY) /
 						viewportState.zoom - size.height / 2;
 					const tile = tileManager.createCanvasTile(
-						"term", cx, cy, { cwd },
+						"term", cx, cy, { cwd, ...size },
 					);
 					tileManager.spawnTerminalWebview(tile, true);
 					tileManager.saveCanvasImmediate();
+					minimap.update();
 				}
 				if (channel === "open-browser-tile") {
 					const url = args[0];
@@ -936,6 +1154,7 @@ async function init() {
 					);
 					tileManager.spawnBrowserWebview(newTile, true);
 					tileManager.saveCanvasImmediate();
+					minimap.update();
 				}
 				if (channel === "create-graph-tile") {
 					const folderPath = args[0];
@@ -947,12 +1166,12 @@ async function init() {
 					const cy =
 						(rect.height / 2 - viewportState.panY) /
 						viewportState.zoom - size.height / 2;
-					const ws =
-						workspaceManager.getActiveWorkspace();
-					const wsPath = ws?.path ?? "";
+					const wsPath =
+						workspaceData.workspaces[0] ?? "";
 					tileManager.createGraphTile(
 						cx, cy, folderPath, wsPath,
 					);
+					minimap.update();
 				}
 			}
 		},
@@ -974,8 +1193,6 @@ async function init() {
 	// -- PTY lifecycle forwarding --
 
 	window.shellApi.onPtyExit((payload) => {
-		terminalListWebview.send("pty-exit", payload);
-
 		for (const [id] of tileManager.getTileDOMs()) {
 			const tile = getTile(id);
 			if (
@@ -983,68 +1200,60 @@ async function init() {
 				tile.ptySessionId === payload.sessionId
 			) {
 				tileManager.closeCanvasTile(id);
+				minimap.update();
 				break;
 			}
 		}
 	});
 
-	window.shellApi.onPtyStatusChanged((payload) => {
-		terminalListWebview.send("pty-status-changed", payload);
-	});
+	// -- Tile list init + click-to-navigate --
 
-	// -- Terminal list init + click-to-focus --
-
-	terminalListWebview.webview.addEventListener(
-		"dom-ready", async () => {
-			const discovered =
-				await window.shellApi.ptyDiscover?.() ?? [];
+	tileListWebview.webview.addEventListener(
+		"dom-ready", () => {
+			lastTileSnapshot = new Map();
 			const initEntries = [];
 			for (const [id] of tileManager.getTileDOMs()) {
 				const tile = getTile(id);
-				if (tile?.type === "term" && tile.ptySessionId) {
-					const disc = discovered.find(
-						(d) => d.sessionId === tile.ptySessionId,
-					);
-					if (!disc) {
-						continue;
-					}
-					syncTerminalTileMeta(tile, disc.meta);
-					const entry = buildTerminalListEntry(tile, disc.meta);
-					if (entry) {
-						initEntries.push(entry);
-					}
+				if (tile) {
+					const entry = buildTileListEntry(tile);
+					initEntries.push(entry);
+					lastTileSnapshot.set(id, entry);
 				}
 			}
-
-			terminalListWebview.send(
-				"terminal-list:init", initEntries,
-			);
+			tileListWebview.send("tile-list:init", initEntries);
 
 			const focusedId = tileManager.getFocusedTileId();
 			if (focusedId) {
-				const tile = getTile(focusedId);
-				terminalListWebview.send(
-					"terminal-list:focus",
-					tile?.ptySessionId || null,
+				tileListWebview.send(
+					"tile-list:focus", focusedId,
 				);
 			}
 		},
 	);
 
-	terminalListWebview.webview.addEventListener(
+	tileListWebview.webview.addEventListener(
 		"ipc-message", (event) => {
-			if (event.channel === "terminal-list:peek-tile") {
-				const sessionId = event.args[0];
-				for (const [id] of tileManager.getTileDOMs()) {
-					const tile = getTile(id);
-					if (
-						tile?.type === "term" &&
-						tile.ptySessionId === sessionId
-					) {
-						edgeIndicators.panToTile(tile);
-						break;
-					}
+			if (event.channel === "tile-list:peek-tile") {
+				const tileId = event.args[0];
+				const tile = getTile(tileId);
+				if (tile) {
+					edgeIndicators.panToTile(
+						tile, { targetZoom: 1 },
+					);
 				}
+			} else if (event.channel === "tile-list:focus-tile") {
+				const tileId = event.args[0];
+				const tile = getTile(tileId);
+				if (tile) {
+					edgeIndicators.panToTile(
+						tile, { targetZoom: 1 },
+					);
+					tileManager.focusCanvasTile(tileId);
+				}
+			} else if (event.channel === "tile-list:rename-tile") {
+				const tileId = event.args[0];
+				const newTitle = event.args[1];
+				tileManager.renameTile(tileId, newTitle);
 			}
 		},
 	);
@@ -1058,7 +1267,7 @@ async function init() {
 	const panelsEl = document.getElementById("panels");
 	new ResizeObserver(() => {
 		panelManager.updateTogglePosition();
-		terminalPanel.updateTogglePosition();
+		agentPanel.updateTogglePosition();
 	}).observe(panelsEl);
 
 	// -- Nav toggle --
@@ -1067,8 +1276,8 @@ async function init() {
 		panelManager.toggle();
 	});
 
-	terminalToggle.addEventListener("click", () => {
-		terminalPanel.toggle();
+	agentToggle.addEventListener("click", () => {
+		agentPanel.toggle();
 	});
 
 	// -- Settings --
@@ -1325,42 +1534,32 @@ async function init() {
 			: 0;
 		viewport.updateCanvas();
 		tileManager.restoreCanvasState(savedState.tiles);
-	}
+		minimap.update();
 
-	// Kill tmux sessions that have no corresponding terminal tile
-	const activeSessionIds = [];
-	for (const [id] of tileManager.getTileDOMs()) {
-		const tile = getTile(id);
-		if (tile?.type === "term" && tile.ptySessionId) {
-			activeSessionIds.push(tile.ptySessionId);
+		// Batch-sync metadata for restored terminal tiles
+		const restoredTermTiles = tiles.filter(
+			(t) => t.type === "term" && t.ptySessionId,
+		);
+		if (restoredTermTiles.length > 0) {
+			const discovered =
+				await window.shellApi.ptyDiscover?.() ?? [];
+			for (const tile of restoredTermTiles) {
+				const session = discovered.find(
+					(entry) => entry.sessionId === tile.ptySessionId,
+				);
+				syncTerminalTileMeta(tile, session?.meta);
+			}
+			tileManager.saveCanvasDebounced();
 		}
 	}
-	window.shellApi.ptyCleanDetached?.(activeSessionIds);
 
 	// -- Initialize workspaces --
 
-	const { workspaces: wsPaths, active } = workspaceData;
-
-	for (const path of wsPaths) {
-		workspaceManager.addWorkspace(path);
-	}
-
-	if (workspaceManager.getWorkspaces().length === 0) {
-		workspaceManager.showEmptyState();
-	} else if (
-		active >= 0 &&
-		active < workspaceManager.getWorkspaces().length
-	) {
-		workspaceManager.switchWorkspace(active);
-	} else if (workspaceManager.getWorkspaces().length > 0) {
-		workspaceManager.switchWorkspace(0);
-	}
+	navWebview.send(
+		"workspace-init", workspaceData.workspaces,
+	);
 
 	panelManager.applyVisibility();
-	terminalPanel.applyVisibility();
-	terminalPanel.setupResize(() => {
-		terminalPanel.updateTogglePosition();
-	});
 
 	// -- beforeunload save --
 
@@ -1440,4 +1639,8 @@ async function checkFirstLaunchDialog() {
 	}, { once: true });
 }
 
-init();
+init().catch((err) => {
+	console.error("[shell] init() failed:", err);
+	const el = document.getElementById("loading-status");
+	if (el) el.textContent = `ERROR: ${err?.message || err}`;
+});

@@ -26,6 +26,7 @@ export function useDragDrop(
 		targetFolder: string,
 	) => Promise<void>,
 	onExpandFolder: (path: string) => void,
+	getWorkspacePath?: (path: string) => string | undefined,
 ): UseDragDropReturn {
 	const [draggedPaths, setDraggedPaths] = useState<
 		string[] | null
@@ -37,6 +38,7 @@ export function useDragDrop(
 		null,
 	);
 	const draggedPathsRef = useRef<string[] | null>(null);
+	const dragSourceWorkspaceRef = useRef<string | undefined>(undefined);
 
 	const clearExpandTimer = useCallback(() => {
 		if (expandTimerRef.current) {
@@ -55,6 +57,8 @@ export function useDragDrop(
 				? [...selectedPaths]
 				: [path];
 			draggedPathsRef.current = paths;
+			dragSourceWorkspaceRef.current =
+				getWorkspacePath?.(path);
 			setDraggedPaths(paths);
 			window.api.setDragPaths(paths);
 			e.dataTransfer.effectAllowed = 'move';
@@ -79,13 +83,23 @@ export function useDragDrop(
 				{ once: true },
 			);
 		},
-		[],
+		[getWorkspacePath],
 	);
 
 	const handleDragOver = useCallback(
 		(e: React.DragEvent, folderPath: string) => {
 			const paths = draggedPathsRef.current;
 			if (!paths) return;
+
+			const sourceWs = dragSourceWorkspaceRef.current;
+			if (
+				sourceWs &&
+				getWorkspacePath &&
+				getWorkspacePath(folderPath) !== sourceWs
+			) {
+				e.dataTransfer.dropEffect = 'none';
+				return;
+			}
 
 			const isInvalid = paths.some(
 				(p) =>
@@ -108,7 +122,7 @@ export function useDragDrop(
 				}, 800);
 			}
 		},
-		[dropTargetPath, clearExpandTimer, onExpandFolder],
+		[dropTargetPath, clearExpandTimer, onExpandFolder, getWorkspacePath],
 	);
 
 	const handleDragLeave = useCallback(() => {
@@ -125,6 +139,15 @@ export function useDragDrop(
 			const paths = draggedPathsRef.current;
 			if (!paths || paths.length === 0) return;
 
+			const sourceWs = dragSourceWorkspaceRef.current;
+			if (
+				sourceWs &&
+				getWorkspacePath &&
+				getWorkspacePath(targetFolder) !== sourceWs
+			) {
+				return;
+			}
+
 			const isInvalid = paths.some(
 				(p) =>
 					p === targetFolder ||
@@ -137,13 +160,14 @@ export function useDragDrop(
 			setDraggedPaths(null);
 			draggedPathsRef.current = null;
 		},
-		[clearExpandTimer, onMove],
+		[clearExpandTimer, onMove, getWorkspacePath],
 	);
 
 	const handleDragEnd = useCallback(() => {
 		setDraggedPaths(null);
 		window.api.clearDragPaths();
 		draggedPathsRef.current = null;
+		dragSourceWorkspaceRef.current = undefined;
 		setDropTargetPath(null);
 		clearExpandTimer();
 	}, [clearExpandTimer]);

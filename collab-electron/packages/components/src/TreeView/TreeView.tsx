@@ -1,8 +1,6 @@
 import React, {
 	useCallback,
-	useEffect,
 	useLayoutEffect,
-	useMemo,
 	useRef,
 	useState,
 } from 'react';
@@ -14,45 +12,19 @@ import {
 	Graph,
 } from '@phosphor-icons/react';
 import type { FlatItem } from './useFileTree';
-import type { TreeNode } from '@collab/shared/types';
 import {
 	formatRelativeTime,
 	displayFileName,
 } from './Helpers';
-import { displayBasename } from '@collab/shared/path-utils';
+import {
+	splitDisplayPath,
+} from '@collab/shared/path-utils';
 import type { SortMode } from './types';
-import { SearchSortControls } from './SearchSortControls';
-import type { SearchSortControlsHandle } from './SearchSortControls';
 import { getFileIcon } from './fileIcons';
 import { useImageThumbnail } from './useImageThumbnail';
 
 const ICON_SIZE = 14;
-export const ENABLE_GRAPH_TILES = true;
-
-function flattenAllFiles(nodes: TreeNode[]): FlatItem[] {
-	const items: FlatItem[] = [];
-	function walk(children: TreeNode[]) {
-		for (const node of children) {
-			if (node.kind === 'file') {
-				const fileName = displayBasename(node.path) || node.name;
-				items.push({
-					id: node.path,
-					kind: 'file',
-					level: 0,
-					name: fileName,
-					path: node.path,
-					ctime: node.ctime,
-					mtime: node.mtime,
-				});
-			}
-			if (node.children) {
-				walk(node.children);
-			}
-		}
-	}
-	walk(nodes);
-	return items;
-}
+export const ENABLE_GRAPH_TILES = false;
 
 interface FolderRowProps {
 	item: FlatItem;
@@ -74,7 +46,7 @@ interface FolderRowProps {
 	onRenameCancel: () => void;
 	onContextMenu?: (
 		e: React.MouseEvent,
-		item: FlatItem,
+		item: FlatItem | null,
 	) => void;
 	isDropTarget: boolean;
 	onDragStart?: (
@@ -92,9 +64,12 @@ interface FolderRowProps {
 	) => void;
 	onDragEnd?: () => void;
 	onSelectFolder?: (path: string) => void;
+	isWorkspace?: boolean;
+	isFirstWorkspace?: boolean;
+	dimmed?: boolean;
 }
 
-const FolderRow = React.memo(function FolderRow({
+export const FolderRow = React.memo(function FolderRow({
 	item,
 	onToggle,
 	onCreateFile,
@@ -114,17 +89,29 @@ const FolderRow = React.memo(function FolderRow({
 	onDrop,
 	onDragEnd,
 	onSelectFolder,
+	isWorkspace = false,
+	isFirstWorkspace = false,
+	dimmed = false,
 }: FolderRowProps) {
-	const style: React.CSSProperties = {
-		paddingLeft: `${item.level * 16 + 8}px`,
-	};
+	const style: React.CSSProperties = isWorkspace
+		? {
+			paddingLeft: '0px',
+			borderTop: isFirstWorkspace
+				? 'none'
+				: '1px solid color-mix(in srgb, var(--foreground) 8%, transparent)',
+		}
+		: {
+			paddingLeft: `${item.level * 14}px`,
+		};
+
+	const className = `collection-tree-row collection-folder-row${isDropTarget ? ' drop-target' : ''}${isWorkspace ? ' workspace-folder-row' : ''}${dimmed ? ' dimmed' : ''}`;
 
 	return (
 		<div
-			className={`collection-tree-row collection-folder-row${isDropTarget ? ' drop-target' : ''}`}
+			className={className}
 			style={style}
-			draggable
-			onDragStart={(e) =>
+			draggable={!isWorkspace}
+			onDragStart={isWorkspace ? undefined : (e) =>
 				onDragStart?.(e, item.path)
 			}
 			onDragOver={(e) =>
@@ -156,7 +143,7 @@ const FolderRow = React.memo(function FolderRow({
 					/>
 				)}
 			</span>
-			{isRenaming ? (
+			{isRenaming && !isWorkspace ? (
 				<input
 					ref={renameInputRef}
 					className="inline-rename-input"
@@ -180,6 +167,15 @@ const FolderRow = React.memo(function FolderRow({
 						e.stopPropagation()
 					}
 				/>
+			) : isWorkspace ? (
+				<div className="workspace-label">
+					<span className="workspace-parent">
+						{splitDisplayPath(item.path).parent}
+					</span>
+					<span className="workspace-name">
+						{item.name}
+					</span>
+				</div>
 			) : (
 				<span className="collection-tree-name">
 					{item.name}
@@ -256,7 +252,7 @@ export interface FileRowProps {
 	onRenameCancel?: () => void;
 	onContextMenu?: (
 		e: React.MouseEvent,
-		item: FlatItem,
+		item: FlatItem | null,
 	) => void;
 	onDragStart?: (
 		e: React.DragEvent,
@@ -286,9 +282,15 @@ export const FileRow = React.memo(
 		onDragEnd,
 		sortMode,
 	}: FileRowProps) {
-		const { stem, ext } = displayFileName(
-			item.name,
-		);
+		const slash = item.name.lastIndexOf('/');
+		const isSearchResult = slash >= 0;
+		const fileName = isSearchResult
+			? item.name.slice(slash + 1)
+			: item.name;
+		const parentDir = isSearchResult
+			? item.name.slice(0, slash + 1)
+			: '';
+		const { stem, ext } = displayFileName(fileName);
 		const thumbnailUrl = useImageThumbnail(item.path, ICON_SIZE * 4);
 		const showTimestamp = !sortMode?.startsWith('alpha');
 
@@ -297,7 +299,7 @@ export const FileRow = React.memo(
 				data-item-id={item.path}
 				className={`collection-tree-row collection-item-row${isSelected ? ' isFocused' : ''}${isMultiSelected ? ' isMultiSelected' : ''}`}
 				style={{
-					paddingLeft: `${item.level * 16 + 8}px`,
+					paddingLeft: `${item.level * 14}px`,
 				}}
 				draggable
 				onDragStart={(e) =>
@@ -332,7 +334,7 @@ export const FileRow = React.memo(
 							alt=""
 						/>
 					) : (() => {
-						const { icon: IconComp, color } = getFileIcon(item.name);
+						const { icon: IconComp, color } = getFileIcon(fileName);
 						return (
 							<IconComp
 								size={ICON_SIZE}
@@ -362,6 +364,20 @@ export const FileRow = React.memo(
 						onBlur={onRenameConfirm}
 						onClick={(e) => e.stopPropagation()}
 					/>
+				) : isSearchResult ? (
+					<div className="search-result-label">
+						<span className="search-result-parent">
+							{parentDir}
+						</span>
+						<span className="search-result-name">
+							{stem}
+							{ext && (
+								<span style={{ opacity: 0.4 }}>
+									{ext}
+								</span>
+							)}
+						</span>
+					</div>
 				) : (
 					<span className="item-text">
 						{stem}
@@ -424,10 +440,8 @@ interface TreeViewProps {
 		item: FlatItem | null,
 	) => void;
 	onDeleteFile?: (path: string) => void;
-	onDeleteFiles?: (paths: string[]) => void;
 	sortMode: SortMode;
 	onCycleSortMode: () => void;
-	leadingContent?: React.ReactNode;
 	renamingPath?: string | null;
 	renameValue?: string;
 	renameInputRef?: React.RefObject<HTMLInputElement | null>;
@@ -450,10 +464,8 @@ interface TreeViewProps {
 	) => void;
 	onDragEnd?: () => void;
 	workspacePath?: string;
-	cursorPath?: string | null;
 	onSelectFolder?: (path: string) => void;
-	isActive?: boolean;
-	searchRef?: React.RefObject<SearchSortControlsHandle | null>;
+	searchQuery?: string;
 }
 
 export const TreeView: React.FC<
@@ -469,8 +481,6 @@ export const TreeView: React.FC<
 	onContextMenu,
 	onDeleteFile,
 	sortMode,
-	onCycleSortMode,
-	leadingContent,
 	renamingPath,
 	renameValue,
 	renameInputRef,
@@ -484,42 +494,10 @@ export const TreeView: React.FC<
 	onDrop,
 	onDragEnd,
 	workspacePath,
-	cursorPath,
 	onSelectFolder,
-	isActive = true,
-	searchRef,
 }) => {
-	const [searchQuery, setSearchQuery] = useState('');
 	const [deleteConfirmId, setDeleteConfirmId] =
 		useState<string | null>(null);
-	const [allFiles, setAllFiles] = useState<FlatItem[] | null>(null);
-	const isSearching = searchQuery.trim().length > 0;
-
-	useEffect(() => {
-		if (!isSearching || !workspacePath) {
-			setAllFiles(null);
-			return;
-		}
-		if (allFiles) return;
-		let cancelled = false;
-		window.api.readTree({ root: workspacePath }).then((tree: TreeNode[]) => {
-			if (cancelled) return;
-			setAllFiles(flattenAllFiles(tree));
-		});
-		return () => { cancelled = true; };
-	}, [isSearching, workspacePath, allFiles]);
-
-	const filteredItems = useMemo(() => {
-		if (!searchQuery.trim()) return flatItems;
-		const query = searchQuery.toLowerCase();
-		const source = allFiles ?? flatItems;
-		return source.filter((item) => {
-			if (item.kind === 'folder') return true;
-			return item.name
-				.toLowerCase()
-				.includes(query);
-		});
-	}, [flatItems, allFiles, searchQuery]);
 
 	const deleteConfirmRef = useRef(deleteConfirmId);
 	deleteConfirmRef.current = deleteConfirmId;
@@ -567,171 +545,7 @@ export const TreeView: React.FC<
 				el.getBoundingClientRect().height,
 			);
 		}
-	}, [folderRowHeight, filteredItems]);
-
-	useEffect(() => {
-		if (!selectedPath || !containerRef.current)
-			return;
-		const el = containerRef.current.querySelector(
-			`[data-item-id="${CSS.escape(selectedPath)}"]`,
-		);
-		if (!el) return;
-		const container = containerRef.current;
-		const elRect = el.getBoundingClientRect();
-		const boxRect =
-			container.getBoundingClientRect();
-		const top = elRect.top - boxRect.top;
-		const bottom = elRect.bottom - boxRect.top;
-
-		if (top < 0) {
-			container.scrollTop += top;
-		} else if (bottom > container.clientHeight) {
-			container.scrollTop +=
-				bottom - container.clientHeight;
-		}
-	}, [selectedPath, filteredItems]);
-
-	const lastSelectedIndexRef = useRef<number>(-1);
-
-	const navigableItems = useMemo(
-		() =>
-			filteredItems.filter(
-				(item) => item.kind === 'file',
-			),
-		[filteredItems],
-	);
-
-	useEffect(() => {
-		const idx = navigableItems.findIndex(
-			(d) => d.path === selectedPath,
-		);
-		if (idx >= 0)
-			lastSelectedIndexRef.current = idx;
-	}, [navigableItems, selectedPath]);
-
-	const navigateItems = useCallback(
-		(direction: 'up' | 'down', shiftKey: boolean) => {
-			if (navigableItems.length === 0) return;
-
-			const effectivePath =
-				cursorPath ?? selectedPath;
-			let currentIndex =
-				navigableItems.findIndex(
-					(d) => d.path === effectivePath,
-				);
-
-			if (
-				currentIndex < 0 &&
-				lastSelectedIndexRef.current >= 0
-			) {
-				currentIndex = Math.min(
-					lastSelectedIndexRef.current,
-					navigableItems.length - 1,
-				);
-			}
-
-			let nextIndex: number;
-			if (direction === 'down') {
-				nextIndex =
-					currentIndex < 0
-						? 0
-						: Math.min(
-								currentIndex + 1,
-								navigableItems.length -
-									1,
-							);
-			} else {
-				nextIndex =
-					currentIndex < 0
-						? 0
-						: Math.max(
-								currentIndex - 1,
-								0,
-							);
-			}
-
-			lastSelectedIndexRef.current = nextIndex;
-			const next = navigableItems[nextIndex];
-			if (!next) return;
-
-			onItemClick(next.path, {
-				metaKey: false,
-				shiftKey,
-			});
-
-			const container = containerRef.current;
-			const el = container?.querySelector(
-				`[data-item-id="${CSS.escape(next.path)}"]`,
-			);
-			if (el && container) {
-				const elRect =
-					el.getBoundingClientRect();
-				const boxRect =
-					container.getBoundingClientRect();
-				const stickyTop =
-					next.level * folderRowHeight;
-				const top =
-					elRect.top - boxRect.top;
-				const bottom =
-					elRect.bottom - boxRect.top;
-
-				if (top < stickyTop) {
-					container.scrollTop +=
-						top - stickyTop;
-				} else if (
-					bottom > container.clientHeight
-				) {
-					container.scrollTop +=
-						bottom -
-						container.clientHeight;
-				}
-			}
-		},
-		[
-			navigableItems,
-			selectedPath,
-			cursorPath,
-			onItemClick,
-			folderRowHeight,
-		],
-	);
-
-	useEffect(() => {
-		if (!isActive) return;
-
-		const handleKeyDown = (
-			e: KeyboardEvent,
-		) => {
-			if (
-				e.key !== 'ArrowUp' &&
-				e.key !== 'ArrowDown'
-			)
-				return;
-
-			const active = document.activeElement;
-			if (
-				active?.tagName === 'INPUT' ||
-				active?.tagName === 'TEXTAREA'
-			)
-				return;
-
-			e.preventDefault();
-			navigateItems(
-				e.key === 'ArrowDown' ? 'down' : 'up',
-				e.shiftKey,
-			);
-		};
-
-		window.addEventListener(
-			'keydown',
-			handleKeyDown,
-		);
-		return () =>
-			window.removeEventListener(
-				'keydown',
-				handleKeyDown,
-			);
-	}, [isActive, navigateItems]);
+	}, [folderRowHeight, flatItems]);
 
 	const renderItems = (
 		start: number,
@@ -740,8 +554,8 @@ export const TreeView: React.FC<
 		const nodes: React.ReactNode[] = [];
 		let i = start;
 
-		while (i < filteredItems.length) {
-			const item = filteredItems[i]!;
+		while (i < flatItems.length) {
+			const item = flatItems[i]!;
 			if (item.level < minLevel) break;
 
 			if (
@@ -754,7 +568,7 @@ export const TreeView: React.FC<
 					item.level + 1,
 				);
 				const guideStyle = {
-					'--guide-left': `${item.level * 16 + 14}px`,
+					'--guide-left': `${item.level * 14 + 6}px`,
 					'--guide-top': `${folderRowHeight}px`,
 					'--guide-z': 9 - item.level,
 				} as React.CSSProperties;
@@ -944,67 +758,40 @@ export const TreeView: React.FC<
 	const [treeContent] = renderItems(0, 0);
 
 	return (
-		<div className="table-container items-table">
-			<SearchSortControls
-				ref={searchRef}
-				leadingContent={leadingContent}
-				searchQuery={searchQuery}
-				onSearchQueryChange={setSearchQuery}
-				sortMode={sortMode}
-				onCycleSortMode={onCycleSortMode}
-				searchPlaceholder="Search  ⌘K"
-				onArrowNav={navigateItems}
-			/>
-			<div className="table-wrapper">
-				<div
-					ref={containerRef}
-					className="table-body-scroll scrollbar-hover"
-					onDragOver={
-						workspacePath
-							? (e) => {
-									if (
-										e.target !==
-										e.currentTarget
-									)
-										return;
-									onDragOver?.(
-										e,
-										workspacePath,
-									);
-								}
-							: undefined
-					}
-					onDrop={
-						workspacePath
-							? (e) => {
-									if (
-										e.target !==
-										e.currentTarget
-									)
-										return;
-									onDrop?.(
-										e,
-										workspacePath,
-									);
-								}
-							: undefined
-					}
-					onContextMenu={(e) => {
-						if (
-							e.target ===
-							e.currentTarget
-						) {
-							e.preventDefault();
-							onContextMenu?.(
+		<div
+			ref={containerRef}
+			onDragOver={
+				workspacePath
+					? (e) => {
+							if (
+								e.target !==
+								e.currentTarget
+							)
+								return;
+							onDragOver?.(
 								e,
-								null,
+								workspacePath,
 							);
 						}
-					}}
-				>
-					{treeContent}
-				</div>
-			</div>
+					: undefined
+			}
+			onDrop={
+				workspacePath
+					? (e) => {
+							if (
+								e.target !==
+								e.currentTarget
+							)
+								return;
+							onDrop?.(
+								e,
+								workspacePath,
+							);
+						}
+					: undefined
+			}
+		>
+			{treeContent}
 		</div>
 	);
 };

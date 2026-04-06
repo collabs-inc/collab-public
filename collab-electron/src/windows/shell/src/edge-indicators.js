@@ -68,7 +68,7 @@ export function createEdgeIndicators({
 	/** @type {Map<string, number>} */
 	const edgeDotFadeOuts = new Map();
 
-	function panToTile(tile) {
+	function panToTile(tile, { targetZoom } = {}) {
 		if (panAnimRaf) {
 			cancelAnimationFrame(panAnimRaf);
 			panAnimRaf = null;
@@ -76,12 +76,14 @@ export function createEdgeIndicators({
 
 		const vw = canvasEl.clientWidth;
 		const vh = canvasEl.clientHeight;
+		const endZoom = targetZoom ?? viewportState.zoom;
 		const targetX =
-			vw / 2 - (tile.x + tile.width / 2) * viewportState.zoom;
+			vw / 2 - (tile.x + tile.width / 2) * endZoom;
 		const targetY =
-			vh / 2 - (tile.y + tile.height / 2) * viewportState.zoom;
+			vh / 2 - (tile.y + tile.height / 2) * endZoom;
 		const startX = viewportState.panX;
 		const startY = viewportState.panY;
+		const startZoom = viewportState.zoom;
 		const startTime = performance.now();
 		const DURATION = 350;
 
@@ -106,6 +108,10 @@ export function createEdgeIndicators({
 			const e = easeOut(t);
 			viewportState.panX = startX + (targetX - startX) * e;
 			viewportState.panY = startY + (targetY - startY) * e;
+			if (targetZoom != null) {
+				viewportState.zoom =
+					startZoom + (endZoom - startZoom) * e;
+			}
 			onViewportUpdate();
 
 			if (t < 1) {

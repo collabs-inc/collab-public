@@ -13,7 +13,7 @@ export interface WindowState {
 
 export interface AppConfig {
   workspaces: string[];
-  active_workspace: number;
+  expanded_workspaces: string[];
   window_state: WindowState | null;
   ui: Record<string, unknown>;
 }
@@ -26,7 +26,7 @@ export type TerminalTarget =
 
 const DEFAULT_CONFIG: AppConfig = {
   workspaces: [],
-  active_workspace: -1,
+  expanded_workspaces: [],
   window_state: null,
   ui: {},
 };
@@ -49,33 +49,29 @@ export function loadConfig(): AppConfig {
     }
 
     let workspaces: string[];
-    let activeWorkspace: number;
 
     if (Array.isArray(parsed.workspaces)) {
       workspaces = (parsed.workspaces as unknown[]).filter(
         (p): p is string => typeof p === "string",
       );
-      const rawIndex =
-        typeof parsed.active_workspace === "number"
-          ? parsed.active_workspace
-          : -1;
-      activeWorkspace = workspaces.length > 0
-        ? Math.max(0, Math.min(rawIndex, workspaces.length - 1))
-        : -1;
     } else if (
       typeof parsed.workspace_path === "string" &&
       parsed.workspace_path !== ""
     ) {
       workspaces = [parsed.workspace_path];
-      activeWorkspace = 0;
     } else {
       workspaces = [];
-      activeWorkspace = -1;
     }
+
+    const expandedWorkspaces = Array.isArray(parsed.expanded_workspaces)
+      ? (parsed.expanded_workspaces as unknown[]).filter(
+          (p): p is string => typeof p === "string",
+        )
+      : [];
 
     return {
       workspaces,
-      active_workspace: activeWorkspace,
+      expanded_workspaces: expandedWorkspaces,
       window_state: (parsed.window_state as WindowState) ?? null,
       ui,
     };

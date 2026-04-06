@@ -20,7 +20,7 @@ async function activateWikiLink(target: string): Promise<void> {
 
   const config = await window.api.getConfig();
   const wsPath =
-    config.workspaces?.[config.active_workspace];
+    config.workspaces?.[0];
   if (!wsPath) return;
 
   const newPath = `${wsPath}/${target}.md`;

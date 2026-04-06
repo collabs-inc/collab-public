@@ -2,13 +2,13 @@ import { ipcMain, shell, type BrowserWindow } from "electron";
 import { extname } from "node:path";
 import * as wikilinkIndex from "./wikilink-index";
 import { buildWorkspaceGraph } from "./workspace-graph";
-import { saveWorkspaceConfig } from "./workspace-config";
+import * as agentActivity from "./agent-activity";
+import { workspaceForFile } from "./ipc-workspace";
 
 interface IpcContext {
   mainWindow: () => BrowserWindow | null;
-  getActiveWorkspacePath: () => string | null;
-  getWorkspaceConfig: (path: string) => any;
   fileFilter: () => any | null;
+  workspaces: () => string[];
   forwardToWebview: (
     target: string,
     channel: string,
@@ -55,29 +55,18 @@ export function registerKnowledgeHandlers(
   );
 
   // Navigation
-  ipcMain.handle(
-    "nav:get-selected-file",
-    () => {
-      const wsPath = ctx.getActiveWorkspacePath();
-      if (!wsPath) return null;
-      return (
-        ctx.getWorkspaceConfig(wsPath)?.selected_file ??
-        null
-      );
-    },
-  );
-
   ipcMain.on("nav:select-file", (_event, path) => {
-    const active = ctx.getActiveWorkspacePath();
-    if (active) {
-      const config = ctx.getWorkspaceConfig(active);
-      config.selected_file = path;
-      saveWorkspaceConfig(active, config);
-    }
     if (path) {
       ctx.trackEvent("file_selected", {
         ext: extname(path),
       });
+      const workspace = workspaceForFile(
+        path,
+        ctx.workspaces(),
+      );
+      if (workspace) {
+        agentActivity.setWorkspacePath(workspace);
+      }
     }
     ctx.forwardToWebview("viewer", "file-selected", path);
     ctx.forwardToWebview("nav", "file-selected", path);

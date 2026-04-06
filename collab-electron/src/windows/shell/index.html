@@ -11,12 +11,14 @@
 <body>
 	<div id="titlebar"></div>
 	<span id="alpha-label">COLLABORATOR ALPHA &#x2022; BEWARE BUGS <a
-			href="https://github.com/collaborator-ai/collab-public/issues/new" target="_blank">[<span>CREATE ISSUE</span>]</a></span>
+			href="https://github.com/collaborator-ai/collab-public/issues/new" target="_blank">[<span>CREATE ISSUE</span>]</a> <a
+			id="alpha-dismiss" href="#">[<span>DISMISS</span>]</a></span>
 
 	<button type="button" id="nav-toggle" class="panel-toggle" aria-pressed="true" aria-label="Hide Navigator"
 		title="Hide Navigator"></button>
-	<button type="button" id="terminal-toggle" class="panel-toggle panel-toggle-right" aria-pressed="true" aria-label="Hide Terminals"
-		title="Hide Terminals"></button>
+
+	<button type="button" id="agent-toggle" class="panel-toggle" aria-pressed="false" aria-label="Show Agent"
+		title="Show Agent"></button>
 
 	<div id="panels">
 		<div id="panel-nav">
@@ -27,23 +29,9 @@
 					</svg>
 				</button>
 				<button type="button" id="update-pill" style="display: none;"></button>
-				<div id="workspace-dropdown-row">
-					<div id="workspace-dropdown">
-						<button type="button" id="workspace-trigger">
-							<span id="workspace-trigger-label"><span id="workspace-trigger-parent"></span><span
-									id="workspace-trigger-name">No workspace</span></span>
-							<svg class="dropdown-caret" width="12" height="12" viewBox="0 0 24 24" fill="none"
-								stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-								<polyline points="6 9 12 15 18 9" />
-							</svg>
-						</button>
-						<div id="workspace-menu" class="hidden">
-							<div id="workspace-menu-items"></div>
-							<button type="button" class="dropdown-item dropdown-item-add" id="ws-add-option">
-								+ Add workspace&#x2026;
-							</button>
-						</div>
-					</div>
+				<div id="sidebar-mode-control">
+					<button type="button" class="mode-btn active" data-mode="files">Files</button>
+					<button type="button" class="mode-btn" data-mode="tiles">Tiles</button>
 				</div>
 			</div>
 		</div>
@@ -53,9 +41,12 @@
 			<div id="tile-layer"></div>
 			<div id="edge-indicators"></div>
 			<div id="zoom-indicator">100%</div>
+			<div id="minimap-wrapper">
+				<canvas id="minimap-canvas"></canvas>
+			</div>
 		</div>
-		<div id="terminal-resize" class="resize-handle" data-panel="terminal"></div>
-		<div id="panel-terminal"></div>
+		<div id="agent-resize" class="resize-handle" data-panel="agent"></div>
+		<div id="panel-agent"></div>
 	</div>
 
 	<div id="settings-overlay">

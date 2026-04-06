@@ -1,7 +1,7 @@
 import type { ITheme } from "@xterm/xterm";
 
 export const darkTheme: ITheme = {
-  background: "#080808",
+  background: "rgba(8, 8, 8, 0)",
   foreground: "#d4d4d4",
   cursor: "#d4d4d4",
   cursorAccent: "#1e1e1e",
@@ -25,7 +25,7 @@ export const darkTheme: ITheme = {
 };
 
 export const lightTheme: ITheme = {
-  background: "#f8f8f8",
+  background: "rgba(248, 248, 248, 0)",
   foreground: "#383a42",
   cursor: "#383a42",
   cursorAccent: "#ffffff",

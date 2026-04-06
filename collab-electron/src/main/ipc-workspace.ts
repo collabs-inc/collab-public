@@ -25,13 +25,11 @@ import { setThumbnailCacheDir } from "./image-service";
 import { shouldIncludeEntryWithContent, fsWriteFile } from "./files";
 import * as watcher from "./watcher";
 import * as wikilinkIndex from "./wikilink-index";
-import * as agentActivity from "./agent-activity";
 import { trackEvent } from "./analytics";
 import type { TreeNode } from "@collab/shared/types";
 
 export interface IpcWorkspaceContext {
   mainWindow: () => BrowserWindow | null;
-  getActiveWorkspacePath: () => string;
   forwardToWebview: (
     target: string,
     channel: string,
@@ -48,12 +46,6 @@ function getWsConfig(workspacePath: string): WorkspaceConfig {
     wsConfigMap.set(workspacePath, config);
   }
   return config;
-}
-
-export function getWorkspaceConfig(
-  path: string,
-): WorkspaceConfig {
-  return getWsConfig(path);
 }
 
 function ensureGitignoreEntry(workspacePath: string): void {
@@ -82,11 +74,39 @@ function initWorkspaceFiles(workspacePath: string): void {
 }
 
 /**
- * Start all workspace-dependent services for the given path.
- * Handles watcher, file filter, wikilink index, agent activity,
- * thumbnail cache, and workspace config loading.
+ * Derive which workspace owns a file path by prefix match.
  */
-export function startWorkspaceServices(
+export function workspaceForFile(
+  filePath: string,
+  workspaces: string[],
+): string | null {
+  return (
+    workspaces.find(
+      (ws) => filePath === ws || filePath.startsWith(ws + "/"),
+    ) ?? null
+  );
+}
+
+/**
+ * Start workspace-dependent services for every configured workspace.
+ */
+export function startAllWorkspaceServices(
+  workspaces: string[],
+  fileFilterSetter: (f: FileFilter) => void,
+): void {
+  for (const ws of workspaces) {
+    wsConfigMap.set(ws, loadWorkspaceConfig(ws));
+    setThumbnailCacheDir(ws);
+    watcher.watchWorkspace(ws);
+    void wikilinkIndex.buildIndex(ws);
+  }
+  fileFilterSetter(createFileFilter());
+}
+
+/**
+ * Start workspace services for a single newly-added workspace.
+ */
+export function startSingleWorkspaceServices(
   path: string,
   fileFilterSetter: (f: FileFilter) => void,
 ): void {
@@ -95,25 +115,16 @@ export function startWorkspaceServices(
   watcher.watchWorkspace(path);
   fileFilterSetter(createFileFilter());
   void wikilinkIndex.buildIndex(path);
-  agentActivity.setWorkspacePath(path);
 }
 
 /**
- * Stop workspace services and reset state.
+ * Stop workspace services for a single removed workspace.
  */
-export function stopWorkspaceServices(): void {
-  watcher.watchWorkspace("");
-  agentActivity.setWorkspacePath("");
-}
-
-function notifyWorkspaceChanged(
-  ctx: IpcWorkspaceContext,
+export function stopSingleWorkspaceServices(
   path: string,
 ): void {
-  ctx.forwardToWebview("nav", "workspace-changed", path);
-  ctx.forwardToWebview("viewer", "workspace-changed", path);
-  ctx.forwardToWebview("terminal", "workspace-changed", path);
-  ctx.mainWindow()?.webContents.send("shell:workspace-changed", path);
+  watcher.unwatchWorkspace(path);
+  wsConfigMap.delete(path);
 }
 
 const LEGACY_FM_FIELDS = new Set([
@@ -214,28 +225,21 @@ export function registerWorkspaceHandlers(
   appConfig: AppConfig,
   fileFilterRef: { current: FileFilter | null },
 ): void {
-  function activeWsConfig(): WorkspaceConfig {
-    const path = ctx.getActiveWorkspacePath();
-    if (!path) {
-      return {
-        selected_file: null,
-        expanded_dirs: [],
-        agent_skip_permissions: false,
-      };
-    }
-    return getWsConfig(path);
-  }
-
   ipcMain.handle("config:get", () => appConfig);
   ipcMain.handle("app:version", () => app.getVersion());
+  ipcMain.handle("app:commit-sha", () => __GIT_COMMIT_SHA__);
 
   ipcMain.handle(
     "workspace-pref:get",
-    (_event, key: string) => {
-      const config = activeWsConfig();
-      if (key === "selected_file") return config.selected_file;
-      if (key === "expanded_dirs") return config.expanded_dirs;
-      if (key === "agent_skip_permissions")
+    (
+      _event,
+      params: { key: string; workspacePath: string },
+    ) => {
+      if (!params.workspacePath) return null;
+      const config = getWsConfig(params.workspacePath);
+      if (params.key === "expanded_dirs")
+        return config.expanded_dirs;
+      if (params.key === "agent_skip_permissions")
         return config.agent_skip_permissions;
       return null;
     },
@@ -243,32 +247,30 @@ export function registerWorkspaceHandlers(
 
   ipcMain.handle(
     "workspace-pref:set",
-    (_event, key: string, value: unknown) => {
-      const active = ctx.getActiveWorkspacePath();
-      if (!active) return;
-      const config = getWsConfig(active);
-      if (key === "selected_file") {
-        config.selected_file =
-          (value as string | null) ?? null;
-      } else if (key === "expanded_dirs") {
-        config.expanded_dirs = Array.isArray(value)
-          ? value
+    (
+      _event,
+      params: {
+        key: string;
+        workspacePath: string;
+        value: unknown;
+      },
+    ) => {
+      if (!params.workspacePath) return;
+      const config = getWsConfig(params.workspacePath);
+      if (params.key === "expanded_dirs") {
+        config.expanded_dirs = Array.isArray(params.value)
+          ? params.value
           : [];
-      } else if (key === "agent_skip_permissions") {
-        config.agent_skip_permissions = value === true;
+      } else if (params.key === "agent_skip_permissions") {
+        config.agent_skip_permissions =
+          params.value === true;
       }
-      saveWorkspaceConfig(active, config);
+      saveWorkspaceConfig(params.workspacePath, config);
     },
-  );
-
-  ipcMain.handle(
-    "shell:get-workspace-path",
-    () => ctx.getActiveWorkspacePath() || null,
   );
 
   ipcMain.handle("workspace:list", () => ({
     workspaces: appConfig.workspaces,
-    active: appConfig.active_workspace,
   }));
 
   ipcMain.handle("workspace:add", async () => {
@@ -282,20 +284,8 @@ export function registerWorkspaceHandlers(
     }
     const chosen = realpathSync(result.filePaths[0]!);
 
-    const existingIndex = appConfig.workspaces.indexOf(chosen);
-    if (existingIndex !== -1) {
-      if (existingIndex !== appConfig.active_workspace) {
-        appConfig.active_workspace = existingIndex;
-        saveConfig(appConfig);
-        startWorkspaceServices(chosen, (f) => {
-          fileFilterRef.current = f;
-        });
-        notifyWorkspaceChanged(ctx, chosen);
-      }
-      return {
-        workspaces: appConfig.workspaces,
-        active: existingIndex,
-      };
+    if (appConfig.workspaces.includes(chosen)) {
+      return { workspaces: appConfig.workspaces };
     }
 
     const collabDir = join(chosen, ".collaborator");
@@ -305,92 +295,60 @@ export function registerWorkspaceHandlers(
     }
 
     appConfig.workspaces.push(chosen);
-    appConfig.active_workspace = appConfig.workspaces.length - 1;
     saveConfig(appConfig);
     trackEvent("workspace_added", { is_new: isNew });
 
-    startWorkspaceServices(chosen, (f) => {
+    startSingleWorkspaceServices(chosen, (f) => {
       fileFilterRef.current = f;
     });
-    notifyWorkspaceChanged(ctx, chosen);
+    ctx.forwardToWebview("nav", "workspace-added", chosen);
 
-    return {
-      workspaces: appConfig.workspaces,
-      active: appConfig.active_workspace,
-    };
+    return { workspaces: appConfig.workspaces };
   });
 
   ipcMain.handle(
     "workspace:remove",
     (_event, index: number) => {
       if (index < 0 || index >= appConfig.workspaces.length) {
-        return {
-          workspaces: appConfig.workspaces,
-          active: appConfig.active_workspace,
-        };
+        return { workspaces: appConfig.workspaces };
       }
 
       const removedPath = appConfig.workspaces[index]!;
-      wsConfigMap.delete(removedPath);
-
-      const wasActive = index === appConfig.active_workspace;
       appConfig.workspaces.splice(index, 1);
-
-      if (appConfig.workspaces.length === 0) {
-        appConfig.active_workspace = -1;
-      } else if (wasActive) {
-        appConfig.active_workspace = Math.min(
-          index,
-          appConfig.workspaces.length - 1,
-        );
-      } else if (appConfig.active_workspace > index) {
-        appConfig.active_workspace -= 1;
-      }
-
       saveConfig(appConfig);
       trackEvent("workspace_removed");
 
-      if (wasActive) {
-        const newPath = ctx.getActiveWorkspacePath();
-        if (newPath) {
-          startWorkspaceServices(newPath, (f) => {
-            fileFilterRef.current = f;
-          });
-          notifyWorkspaceChanged(ctx, newPath);
-        } else {
-          stopWorkspaceServices();
-          fileFilterRef.current = null;
-          notifyWorkspaceChanged(ctx, "");
-        }
-      }
+      stopSingleWorkspaceServices(removedPath);
+      ctx.forwardToWebview(
+        "nav",
+        "workspace-removed",
+        removedPath,
+      );
 
-      return {
-        workspaces: appConfig.workspaces,
-        active: appConfig.active_workspace,
-      };
+      return { workspaces: appConfig.workspaces };
     },
   );
 
   ipcMain.handle(
-    "workspace:switch",
-    (_event, index: number) => {
-      if (
-        index < 0 ||
-        index >= appConfig.workspaces.length ||
-        index === appConfig.active_workspace
-      ) {
-        return;
+    "workspace:remove-by-path",
+    (_event, path: string) => {
+      const index = appConfig.workspaces.indexOf(path);
+      if (index === -1) {
+        return { workspaces: appConfig.workspaces };
       }
 
-      appConfig.active_workspace = index;
+      appConfig.workspaces.splice(index, 1);
       saveConfig(appConfig);
-      trackEvent("workspace_switched");
+      trackEvent("workspace_removed");
 
-      const newPath = appConfig.workspaces[index]!;
-      startWorkspaceServices(newPath, (f) => {
-        fileFilterRef.current = f;
-      });
-      notifyWorkspaceChanged(ctx, newPath);
+      stopSingleWorkspaceServices(path);
+      ctx.forwardToWebview(
+        "nav",
+        "workspace-removed",
+        path,
+      );
+
+      return { workspaces: appConfig.workspaces };
     },
   );
 

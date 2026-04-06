@@ -12,12 +12,12 @@ interface AllViewConfigs {
   terminalTile: ViewConfig;
   graphTile: ViewConfig;
   settings: ViewConfig;
-  terminalList: ViewConfig;
+  tileList: ViewConfig;
 }
 
 const ALLOWED_PANELS = new Set([
   "nav", "viewer", "terminal", "terminalTile",
-  "graphTile", "settings", "terminal-list",
+  "graphTile", "settings", "tile-list",
 ]);
 
 // Buffer loading-done signal so it isn't lost if it arrives before
@@ -158,21 +158,22 @@ contextBridge.exposeInMainWorld("shellApi", {
   isDirectory: (filePath: string): Promise<boolean> =>
     ipcRenderer.invoke("fs:is-directory", filePath),
 
-  getWorkspacePath: (): Promise<string> =>
-    ipcRenderer.invoke("shell:get-workspace-path"),
-
   workspaceAdd: () => ipcRenderer.invoke("workspace:add"),
   workspaceRemove: (index: number) =>
     ipcRenderer.invoke("workspace:remove", index),
-  workspaceSwitch: (index: number) =>
-    ipcRenderer.invoke("workspace:switch", index),
   workspaceList: () => ipcRenderer.invoke("workspace:list"),
 
-  onWorkspaceChanged: (cb: (path: string) => void) => {
+  onWorkspaceAdded: (cb: (path: string) => void) => {
     const handler = (_event: unknown, path: string) => cb(path);
-    ipcRenderer.on("shell:workspace-changed", handler);
+    ipcRenderer.on("workspace-added", handler);
     return () =>
-      ipcRenderer.removeListener("shell:workspace-changed", handler);
+      ipcRenderer.removeListener("workspace-added", handler);
+  },
+  onWorkspaceRemoved: (cb: (path: string) => void) => {
+    const handler = (_event: unknown, path: string) => cb(path);
+    ipcRenderer.on("workspace-removed", handler);
+    return () =>
+      ipcRenderer.removeListener("workspace-removed", handler);
   },
 
   onCanvasPinch: (cb: (deltaY: number) => void) => {
@@ -224,6 +225,8 @@ contextBridge.exposeInMainWorld("shellApi", {
   markPluginOffered: () =>
     ipcRenderer.invoke("integrations:mark-plugin-offered"),
 
+  getHomePath: (): string => ipcRenderer.sendSync("get-home-path"),
+
   ptyKillSession: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke("pty:kill", { sessionId }),
 
@@ -261,6 +264,4 @@ contextBridge.exposeInMainWorld("shellApi", {
   },
 
   ptyDiscover: () => ipcRenderer.invoke("pty:discover"),
-  ptyCleanDetached: (activeSessionIds: string[]) =>
-    ipcRenderer.invoke("pty:clean-detached", activeSessionIds),
 });

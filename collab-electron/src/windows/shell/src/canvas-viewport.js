@@ -88,7 +88,7 @@ export function createViewport(canvasEl, gridCanvas) {
 	}
 
 	function updateCanvas() {
-		drawGrid();
+		// drawGrid(); // TEMP: disabled for transparency testing
 		if (onUpdate) onUpdate();
 	}
 
@@ -197,5 +197,10 @@ export function createViewport(canvasEl, gridCanvas) {
 		},
 		updateCanvas,
 		applyZoom,
+		setPan(x, y) {
+			state.panX = x;
+			state.panY = y;
+			updateCanvas();
+		},
 	};
 }

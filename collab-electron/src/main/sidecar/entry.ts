@@ -4,7 +4,6 @@ import {
   SIDECAR_SOCKET_PATH,
   SIDECAR_PID_PATH,
   SESSION_SOCKET_DIR,
-  IDLE_TIMEOUT_MS,
 } from "./protocol";
 
 function main(): void {
@@ -22,7 +21,6 @@ function main(): void {
     sessionSocketDir: SESSION_SOCKET_DIR,
     pidFilePath: SIDECAR_PID_PATH,
     token,
-    idleTimeoutMs: IDLE_TIMEOUT_MS,
   });
 
   process.on("SIGTERM", () => {

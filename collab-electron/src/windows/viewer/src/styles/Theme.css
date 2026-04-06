@@ -17,7 +17,7 @@
 
 	/* Font families - source of truth, referenced by @theme and body */
 	font-size: 16px;
-	--font-sans: system-ui, sans-serif;
+	--font-sans: 'Geist', system-ui, sans-serif;
 	--font-mono: 'Geist Mono';
 
 	/* Universal semantic colors */

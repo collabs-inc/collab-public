@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
@@ -7,7 +7,7 @@
 
 :root {
 	font-size: 16px;
-	--font-sans: system-ui, sans-serif;
+	--font-sans: 'Geist', system-ui, sans-serif;
 	--font-mono: 'Geist Mono';
 
 	/* Core */

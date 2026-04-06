@@ -2,7 +2,6 @@ import { type BrowserWindow } from "electron";
 import type { FileFilter } from "./file-filter";
 import type { AppConfig } from "./config";
 import { invalidateImageCache } from "./image-service";
-import { saveWorkspaceConfig } from "./workspace-config";
 import * as watcher from "./watcher";
 import * as wikilinkIndex from "./wikilink-index";
 import { trackEvent } from "./analytics";
@@ -13,8 +12,7 @@ import {
 } from "./ipc-filesystem";
 import {
   registerWorkspaceHandlers,
-  startWorkspaceServices,
-  getWorkspaceConfig,
+  startAllWorkspaceServices,
 } from "./ipc-workspace";
 import { registerKnowledgeHandlers } from "./ipc-knowledge";
 import { registerCanvasHandlers } from "./ipc-canvas";
@@ -27,11 +25,6 @@ let mainWindow: BrowserWindow | null = null;
 const fileFilterRef: { current: FileFilter | null } = {
   current: null,
 };
-
-function activeWorkspacePath(): string {
-  const { workspaces, active_workspace } = appConfig;
-  return workspaces[active_workspace] ?? "";
-}
 
 function forwardToWebview(
   target: string,
@@ -53,9 +46,8 @@ export function setMainWindow(win: BrowserWindow): void {
 export function registerIpcHandlers(config: AppConfig): void {
   appConfig = config;
 
-  const wsPath = activeWorkspacePath();
-  if (wsPath) {
-    startWorkspaceServices(wsPath, (f) => {
+  if (appConfig.workspaces.length > 0) {
+    startAllWorkspaceServices(appConfig.workspaces, (f) => {
       fileFilterRef.current = f;
     });
   }
@@ -97,33 +89,13 @@ export function registerIpcHandlers(config: AppConfig): void {
       forwardToWebview(
         "viewer", "files-deleted", deletedPaths,
       );
-      const active = activeWorkspacePath();
-      if (active) {
-        const wsConfig = getWorkspaceConfig(active);
-        if (
-          wsConfig.selected_file &&
-          deletedPaths.includes(wsConfig.selected_file)
-        ) {
-          wsConfig.selected_file = null;
-          saveWorkspaceConfig(active, wsConfig);
-        }
-      }
     }
   });
 
   // Shared context for domain modules
   const fsCtx = {
     mainWindow: () => mainWindow,
-    getActiveWorkspacePath: activeWorkspacePath,
-    getWorkspaceConfig,
-    saveWorkspaceConfig: (
-      path: string,
-      cfg: {
-        selected_file: string | null;
-        expanded_dirs: string[];
-        agent_skip_permissions: boolean;
-      },
-    ) => saveWorkspaceConfig(path, cfg),
+    workspaces: () => appConfig.workspaces,
     fileFilter: () => fileFilterRef.current,
     forwardToWebview,
     trackEvent,
@@ -131,17 +103,25 @@ export function registerIpcHandlers(config: AppConfig): void {
 
   const wsCtx = {
     mainWindow: () => mainWindow,
-    getActiveWorkspacePath: activeWorkspacePath,
     forwardToWebview,
   };
 
-  const sharedCtx = {
+  const knowledgeCtx = {
     mainWindow: () => mainWindow,
-    getActiveWorkspacePath: () =>
-      activeWorkspacePath() || null,
-    getWorkspaceConfig: (path: string) =>
-      getWorkspaceConfig(path) as any,
     fileFilter: () => fileFilterRef.current as any,
+    workspaces: () => appConfig.workspaces,
+    forwardToWebview,
+    trackEvent,
+  };
+
+  const canvasCtx = {
+    mainWindow: () => mainWindow,
+    forwardToWebview,
+  };
+
+  const miscCtx = {
+    mainWindow: () => mainWindow,
+    workspaces: () => appConfig.workspaces,
     forwardToWebview,
     trackEvent,
   };
@@ -149,7 +129,7 @@ export function registerIpcHandlers(config: AppConfig): void {
   // Register domain handlers
   registerFilesystemHandlers(fsCtx);
   registerWorkspaceHandlers(wsCtx, appConfig, fileFilterRef);
-  registerKnowledgeHandlers(sharedCtx);
-  registerCanvasHandlers(sharedCtx);
-  registerMiscHandlers(sharedCtx);
+  registerKnowledgeHandlers(knowledgeCtx);
+  registerCanvasHandlers(canvasCtx);
+  registerMiscHandlers(miscCtx);
 }

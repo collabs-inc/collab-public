@@ -148,13 +148,11 @@ const builtArches = targetArchitectures();
 // Vite build is arch-independent — run once.
 run(process.execPath, [electronVite, "build"]);
 
-// Package once per target arch.
-for (const arch of builtArches) {
-  // On macOS, electron-builder's npmRebuild handles native modules.
-  // On Windows, the afterPack hook (after-pack-pty.cjs) installs prebuilds
-  // into the staged output directory to avoid EBUSY on locked .node files.
-  run(process.execPath, [electronBuilder, ...builderArgs, `--${arch}`]);
-}
+// Package all target architectures in a single electron-builder run.
+// The arch list in package.json's build.<platform>.target already tells
+// electron-builder which architectures to produce, so passing --<arch>
+// per-invocation just causes redundant full builds + notarizations.
+run(process.execPath, [electronBuilder, ...builderArgs]);
 
 // electron-builder's npmRebuild rewrites node-pty's native binary in-place
 // for the last target architecture. On a cross-compile (e.g. x64 pass on an

@@ -3,17 +3,10 @@ import * as canvasPersistence from "./canvas-persistence";
 
 interface IpcContext {
   mainWindow: () => BrowserWindow | null;
-  getActiveWorkspacePath: () => string | null;
-  getWorkspaceConfig: (path: string) => any;
-  fileFilter: () => any | null;
   forwardToWebview: (
     target: string,
     channel: string,
     ...args: unknown[]
-  ) => void;
-  trackEvent: (
-    name: string,
-    props?: Record<string, unknown>,
   ) => void;
 }
 

@@ -45,7 +45,9 @@ function TerminalTab({
 			cursorBlink: true,
 			scrollback: 200000,
 			allowProposedApi: true,
+			allowTransparency: true,
 			macOptionIsMeta: false,
+			overviewRuler: { width: 8 },
 		});
 
 		const fit = new FitAddon();
@@ -198,6 +200,21 @@ function TerminalTab({
 				if (e.key === "t" || (e.key >= "1" && e.key <= "9")) {
 					return false;
 				}
+			}
+			return true;
+		});
+
+		// OSC 7: shell reports current working directory
+		// Format: file://hostname/path or file:///path
+		term.parser.registerOscHandler(7, (data) => {
+			try {
+				const url = new URL(data);
+				if (url.protocol === "file:") {
+					const cwd = decodeURIComponent(url.pathname);
+					if (cwd) window.api.notifyCwdChanged(sessionId, cwd);
+				}
+			} catch {
+				// Malformed URL — ignore
 			}
 			return true;
 		});

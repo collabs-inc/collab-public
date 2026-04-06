@@ -3,6 +3,7 @@
 // Upload build artifacts to GitHub Releases.
 // Requires GH_TOKEN or GITHUB_TOKEN environment variable.
 
+const { execSync } = require("child_process");
 const { Octokit } = require("@octokit/rest");
 const crypto = require("crypto");
 const fs = require("fs");
@@ -21,6 +22,10 @@ if (fs.existsSync(envLocalPath)) {
   }
 }
 
+const commitSha = execSync("git rev-parse HEAD", {
+  encoding: "utf8",
+}).trim();
+
 const pkg = require("../package.json");
 const version = pkg.version;
 const product = pkg.build.productName;
@@ -38,6 +43,18 @@ const distDir = path.join(__dirname, "..", pkg.build.directories.output);
 function sha512Base64(filePath) {
   const buf = fs.readFileSync(filePath);
   return crypto.createHash("sha512").update(buf).digest("base64");
+}
+
+// Append a commit field to an electron-builder-generated yml file.
+// Inserted before releaseDate so the field order stays logical.
+function appendCommitToYml(ymlPath) {
+  const content = fs.readFileSync(ymlPath, "utf8");
+  if (content.includes("commit:")) return;
+  const updated = content.replace(
+    /^(releaseDate:.*)$/m,
+    `commit: ${commitSha}\n$1`,
+  );
+  fs.writeFileSync(ymlPath, updated);
 }
 
 function resolveArtifact(label, artifactPath, optional) {
@@ -84,6 +101,7 @@ function collectMacArtifacts() {
       `    size: ${stats.size}${blockMapLine}`,
       `path: ${zipName}`,
       `sha512: ${hash}`,
+      `commit: ${commitSha}`,
       `releaseDate: '${releaseDate}'`,
       "",
     ].join("\n");
@@ -152,6 +170,7 @@ function collectWindowsArtifacts() {
   // bridge for old installs that still look for the default channel name.
   const srcYml = resolveArtifact("latest.yml", path.join(distDir, "latest.yml"), true);
   if (srcYml) {
+    appendCommitToYml(srcYml);
     const winYmlPath = path.join(distDir, "latest-win.yml");
     fs.copyFileSync(srcYml, winYmlPath);
     console.log("Generated latest-win.yml");
@@ -179,6 +198,7 @@ function collectLinuxArtifacts() {
     true,
   );
   if (yml) {
+    appendCommitToYml(yml);
     list.push({ label: "latest-linux.yml", path: yml });
   } else {
     console.warn("No latest-linux.yml found — Linux auto-updates will not work");

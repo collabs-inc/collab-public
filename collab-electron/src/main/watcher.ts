@@ -21,6 +21,7 @@ let worker: UtilityProcess | null = null;
 let notifyFn: NotifyFn | null = null;
 let restartCount = 0;
 let stopping = false;
+const watchedPaths = new Set<string>();
 
 function workerPath(): string {
   return join(__dirname, "watcher-worker.js");
@@ -52,6 +53,10 @@ export function startWorker(): void {
     );
     restartCount++;
     startWorker();
+
+    for (const p of watchedPaths) {
+      worker?.postMessage({ cmd: "watch-add", path: p });
+    }
   });
 }
 
@@ -60,16 +65,20 @@ export function setNotifyFn(fn: NotifyFn): void {
 }
 
 export function watchWorkspace(workspacePath: string): void {
-  if (!workspacePath) {
-    worker?.postMessage({ cmd: "unwatch" });
-    return;
-  }
-  worker?.postMessage({ cmd: "watch", path: workspacePath });
+  if (!workspacePath || watchedPaths.has(workspacePath)) return;
+  watchedPaths.add(workspacePath);
+  worker?.postMessage({ cmd: "watch-add", path: workspacePath });
+}
+
+export function unwatchWorkspace(workspacePath: string): void {
+  if (!watchedPaths.delete(workspacePath)) return;
+  worker?.postMessage({ cmd: "watch-remove", path: workspacePath });
 }
 
 export function stopWorker(): void {
   if (!worker) return;
   stopping = true;
+  watchedPaths.clear();
   worker.postMessage({ cmd: "close" });
   worker.kill();
   worker = null;

@@ -31,22 +31,23 @@ const EVENT_TYPE_MAP: Record<Event["type"], FileChangeType> = {
   delete: 3,
 };
 
-interface WatchCommand {
-  cmd: "watch";
+interface WatchAddCommand {
+  cmd: "watch-add" | "watch";
   path: string;
 }
 
-interface UnwatchCommand {
-  cmd: "unwatch";
+interface WatchRemoveCommand {
+  cmd: "watch-remove";
+  path: string;
 }
 
 interface CloseCommand {
   cmd: "close";
 }
 
-type WorkerCommand = WatchCommand | UnwatchCommand | CloseCommand;
+type WorkerCommand = WatchAddCommand | WatchRemoveCommand | CloseCommand;
 
-let subscription: AsyncSubscription | null = null;
+const subscriptions = new Map<string, AsyncSubscription>();
 
 function toFsChangeEvents(events: Event[]): FsChangeEvent[] {
   const byDir = new Map<
@@ -74,11 +75,11 @@ function toFsChangeEvents(events: Event[]): FsChangeEvent[] {
   return result;
 }
 
-async function watchFolder(folderPath: string): Promise<void> {
-  await unwatch();
+async function watchAdd(folderPath: string): Promise<void> {
+  if (subscriptions.has(folderPath)) return;
 
   try {
-    subscription = await watcher.subscribe(
+    const sub = await watcher.subscribe(
       folderPath,
       (error, events) => {
         if (error) {
@@ -92,6 +93,7 @@ async function watchFolder(folderPath: string): Promise<void> {
       },
       { ignore: IGNORE },
     );
+    subscriptions.set(folderPath, sub);
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
     console.error(
@@ -100,11 +102,32 @@ async function watchFolder(folderPath: string): Promise<void> {
   }
 }
 
-async function unwatch(): Promise<void> {
-  if (subscription) {
-    await subscription.unsubscribe();
-    subscription = null;
+async function watchRemove(folderPath: string): Promise<void> {
+  const sub = subscriptions.get(folderPath);
+  if (!sub) return;
+  try {
+    await sub.unsubscribe();
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    console.error(
+      `[watcher-worker] Failed to unwatch ${folderPath}: ${err.message}`,
+    );
   }
+  subscriptions.delete(folderPath);
+}
+
+async function unwatchAll(): Promise<void> {
+  for (const [path, sub] of subscriptions.entries()) {
+    try {
+      await sub.unsubscribe();
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      console.error(
+        `[watcher-worker] Failed to unwatch ${path}: ${err.message}`,
+      );
+    }
+  }
+  subscriptions.clear();
 }
 
 const keepAlive = setInterval(() => {}, 2 ** 31 - 1);
@@ -112,12 +135,12 @@ const keepAlive = setInterval(() => {}, 2 ** 31 - 1);
 let pending: Promise<void> = Promise.resolve();
 
 process.parentPort.on("message", ({ data }: { data: WorkerCommand }) => {
-  if (data.cmd === "watch") {
-    pending = pending.then(() => watchFolder(data.path));
-  } else if (data.cmd === "unwatch") {
-    pending = pending.then(() => unwatch());
+  if (data.cmd === "watch-add" || data.cmd === "watch") {
+    pending = pending.then(() => watchAdd(data.path));
+  } else if (data.cmd === "watch-remove") {
+    pending = pending.then(() => watchRemove(data.path));
   } else if (data.cmd === "close") {
     clearInterval(keepAlive);
-    pending.then(() => unwatch()).then(() => process.exit(0));
+    pending.then(() => unwatchAll()).then(() => process.exit(0));
   }
 });

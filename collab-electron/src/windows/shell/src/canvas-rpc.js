@@ -36,8 +36,7 @@ export function findAutoPlacement(existingTiles, width, height) {
  *          tileFocus.
  */
 export function createCanvasRpc({
-	tileManager, viewportState, viewport, workspaceManager,
-	edgeIndicators,
+	tileManager, viewportState, viewport, edgeIndicators,
 }) {
 	function respond(requestId, result) {
 		window.shellApi.canvasRpcResponse({ requestId, result });
@@ -91,8 +90,7 @@ export function createCanvasRpc({
 						);
 						tileManager.spawnTerminalWebview(tile);
 					} else if (tileType === "graph") {
-						const ws = workspaceManager.getActiveWorkspace();
-						const wsPath = ws?.path ?? "";
+						const wsPath = "";
 						tile = tileManager.createGraphTile(
 							pos.x, pos.y, params.filePath, wsPath,
 						);

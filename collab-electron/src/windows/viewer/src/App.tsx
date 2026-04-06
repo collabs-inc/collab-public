@@ -114,8 +114,7 @@ export default function App() {
 	// Load workspace path on mount
 	useEffect(() => {
 		window.api.getConfig().then((config) => {
-			const active =
-				config.workspaces?.[config.active_workspace];
+			const active = config.workspaces?.[0];
 			if (active) setWorkspacePath(active);
 		});
 	}, []);
@@ -126,24 +125,25 @@ export default function App() {
 		});
 	}, []);
 
-	// Keep workspace path in sync when changed via settings (singleton viewer only)
+	// Keep workspace path in sync when workspaces change (singleton viewer only)
 	useEffect(() => {
 		if (isTileMode) return;
-		return window.api.onWorkspaceChanged((newPath) => {
-			setWorkspacePath((prev) => {
-				if (prev !== newPath) setSelectedPath(null);
-				return newPath;
+		const refresh = () => {
+			window.api.getConfig().then((config) => {
+				const active = config.workspaces?.[0];
+				setWorkspacePath((prev) => {
+					if (prev !== (active ?? null)) setSelectedPath(null);
+					return active ?? null;
+				});
 			});
-		});
+		};
+		const unsub1 = window.api.onWorkspaceAdded(refresh);
+		const unsub2 = window.api.onWorkspaceRemoved(refresh);
+		return () => { unsub1(); unsub2(); };
 	}, []);
 
-	// Restore persisted file selection on mount (singleton viewer only)
-	useEffect(() => {
-		if (isTileMode) return;
-		window.api.getSelectedFile().then((path) => {
-			if (path) setSelectedPath(path);
-		});
-	}, []);
+	// File selection is now restored via the onFileSelected IPC event
+	// sent by the shell on mount — no separate getSelectedFile needed.
 
 	// Listen for file selection from nav view (singleton viewer only)
 	useEffect(() => {

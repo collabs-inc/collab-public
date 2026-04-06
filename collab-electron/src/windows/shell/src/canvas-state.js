@@ -13,6 +13,8 @@
  * @property {string} [url] - URL for browser tiles
  * @property {string} [cwd] - Working directory for terminal tiles
  * @property {string} [ptySessionId] - PTY session ID for terminal tiles
+ * @property {string} [userTitle] - Manual title override set by user
+ * @property {string} [autoTitle] - Auto-computed title from terminal session
  * @property {number} zIndex - Stacking order
  */
 
