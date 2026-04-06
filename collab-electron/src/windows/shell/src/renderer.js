@@ -241,6 +241,7 @@ async function init() {
 			cwd: meta.cwdHostPath || meta.cwd || tile.cwd || "~",
 			foreground: null,
 			tileId: tile.id,
+			customName: tile.customName || null,
 		};
 	}
 
@@ -1045,6 +1046,13 @@ async function init() {
 						break;
 					}
 				}
+			} else if (event.channel === "terminal-list:rename") {
+				const { sessionId, name } = event.args[0];
+				tileManager.renameTerminal(sessionId, name);
+				terminalListWebview.send(
+					"terminal-list:renamed",
+					{ sessionId, name },
+				);
 			}
 		},
 	);

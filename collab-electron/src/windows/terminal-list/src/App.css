@@ -119,3 +119,37 @@ body {
   direction: rtl;
   text-align: left;
 }
+
+.rename-btn {
+  background: none;
+  border: none;
+  color: var(--muted, #888);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 80ms ease;
+  flex-shrink: 0;
+}
+
+.terminal-entry:hover .rename-btn {
+  opacity: 1;
+}
+
+.rename-btn:hover {
+  color: var(--text, #ccc);
+}
+
+.rename-input {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  color: var(--text, #ccc);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 1px 4px;
+  outline: none;
+  width: 100%;
+  min-width: 0;
+}

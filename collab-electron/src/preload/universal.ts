@@ -571,6 +571,7 @@ contextBridge.exposeInMainWorld("api", {
       "terminal-list:add",
       "terminal-list:remove",
       "terminal-list:focus",
+      "terminal-list:renamed",
       "pty-status-changed",
       "pty-exit",
     ];

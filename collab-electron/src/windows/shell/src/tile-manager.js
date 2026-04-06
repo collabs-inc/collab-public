@@ -61,6 +61,7 @@ export function createTileManager({
 				workspacePath: t.workspacePath,
 				ptySessionId: t.ptySessionId,
 				url: t.url,
+				customName: t.customName || undefined,
 				zIndex: t.zIndex,
 			})),
 			viewport: {
@@ -629,6 +630,7 @@ export function createTileManager({
 						height: saved.height,
 						zIndex: saved.zIndex,
 						ptySessionId: saved.ptySessionId,
+						customName: saved.customName || null,
 					},
 				);
 				spawnTerminalWebview(tile);
@@ -711,6 +713,18 @@ export function createTileManager({
 		}
 	}
 
+	function renameTerminal(sessionId, name) {
+		for (const t of tiles) {
+			if (t.type === "term" && t.ptySessionId === sessionId) {
+				t.customName = name || null;
+				const dom = tileDOMs.get(t.id);
+				if (dom) updateTileTitle(dom, t);
+				saveCanvasDebounced();
+				break;
+			}
+		}
+	}
+
 	function broadcastToTileWebviews(channel, ...args) {
 		for (const [, dom] of tileDOMs) {
 			if (dom.webview) dom.webview.send(channel, ...args);
@@ -739,6 +753,7 @@ export function createTileManager({
 		updateTileForRename,
 		closeTilesForDeletedPaths,
 		broadcastToTileWebviews,
+		renameTerminal,
 		saveCanvasDebounced,
 		saveCanvasImmediate,
 	};
