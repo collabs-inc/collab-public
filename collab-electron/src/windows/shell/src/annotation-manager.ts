@@ -48,29 +48,14 @@ export type Annotation =
 
 export const annotations: Annotation[] = [];
 
-let idCounter = 0;
-
 let currentMode: DrawMode = "pointer";
 
 export function generateAnnotationId(): string {
-	idCounter++;
-	return `ann-${Date.now()}-${idCounter}`;
+	return `ann-${Date.now()}`;
 }
 
 export function getDefaultAnnotationColor(): string {
-	const raw = getComputedStyle(document.documentElement)
-		.getPropertyValue("--muted")
-		.trim();
-	const m = raw.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-	if (m) {
-		return (
-			"#" +
-			[m[1]!, m[2]!, m[3]!]
-				.map((v) => parseInt(v, 10).toString(16).padStart(2, "0"))
-				.join("")
-		);
-	}
-	return "#888888";
+	return document.documentElement.classList.contains("dark") ? "#848484" : "#71717b";
 }
 
 export function addAnnotation(data: Omit<Annotation, "id">): Annotation {
