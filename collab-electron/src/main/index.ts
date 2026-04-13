@@ -185,7 +185,7 @@ interface ShortcutEntry {
 const TOGGLE_SHORTCUTS: Record<string, ShortcutEntry[]> = {
   KeyB: [
     { modifier: altCmdOrCtrl, action: "toggle-agent" },
-    { modifier: cmdOrCtrl, action: "sidebar-files" },
+    { modifier: shiftCmdOrCtrl, action: "sidebar-files" },
   ],
   Backslash: [{ modifier: cmdOrCtrl, action: "sidebar-files" }],
   Comma: [{ modifier: cmdOrCtrl, action: "toggle-settings" }],
@@ -377,7 +377,7 @@ function buildAppMenu(): void {
       submenu: [
         {
           label: "Toggle Files",
-          accelerator: "CommandOrControl+B",
+          accelerator: "CommandOrControl+Shift+B",
           registerAccelerator: false,
           click: () => sendShortcut("sidebar-files"),
         },
