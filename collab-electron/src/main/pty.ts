@@ -485,7 +485,14 @@ export async function createSession(
   cwdHostPath: string;
   cwdGuestPath?: string;
 }> {
-  const resolvedCwd = cwd || os.homedir();
+  let resolvedCwd = cwd || os.homedir();
+  // Fall back to home directory if the requested cwd does not exist
+  // (e.g. a remembered remote/WSL path on a local macOS host).
+  try {
+    fs.accessSync(resolvedCwd);
+  } catch {
+    resolvedCwd = os.homedir();
+  }
   const shell = process.env.SHELL || "/bin/zsh";
   const c = cols || 80;
   const r = rows || 24;
