@@ -36,6 +36,10 @@ function TerminalTab({
 		const container = containerRef.current;
 		if (!container) return;
 
+		const prefersDark = window.matchMedia(
+			"(prefers-color-scheme: dark)",
+		).matches;
+
 		const term = new Terminal({
 			theme: getTheme(),
 			fontFamily: 'Menlo, Monaco, "Courier New", monospace',
@@ -45,7 +49,9 @@ function TerminalTab({
 			cursorBlink: true,
 			scrollback: 200000,
 			allowProposedApi: true,
+			allowTransparency: prefersDark,
 			macOptionIsMeta: false,
+			overviewRuler: { width: 8 },
 		});
 
 		const fit = new FitAddon();
@@ -202,6 +208,21 @@ function TerminalTab({
 			return true;
 		});
 
+		// OSC 7: shell reports current working directory
+		// Format: file://hostname/path or file:///path
+		term.parser.registerOscHandler(7, (data) => {
+			try {
+				const url = new URL(data);
+				if (url.protocol === "file:") {
+					const cwd = decodeURIComponent(url.pathname);
+					if (cwd) window.api.notifyCwdChanged(sessionId, cwd);
+				}
+			} catch {
+				// Malformed URL — ignore
+			}
+			return true;
+		});
+
 		term.onData((data: string) => {
 			window.api.ptyWrite(sessionId, data);
 		});
@@ -345,7 +366,8 @@ function TerminalTab({
 		const mediaQuery = window.matchMedia(
 			"(prefers-color-scheme: dark)",
 		);
-		const onThemeChange = () => {
+		const onThemeChange = (e: MediaQueryListEvent) => {
+			term.options.allowTransparency = e.matches;
 			term.options.theme = getTheme();
 		};
 		mediaQuery.addEventListener("change", onThemeChange);

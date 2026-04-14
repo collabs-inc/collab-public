@@ -16,18 +16,19 @@ interface Pending {
 
 let worker: Worker | null = null;
 let nextId = 1;
-let cacheDir: string | null = null;
+const cacheDirs = new Set<string>();
 const pending = new Map<number, Pending>();
 
 export function setThumbnailCacheDir(workspacePath: string): void {
-  cacheDir = join(workspacePath, ".collaborator", "thumbnails");
+  cacheDirs.add(join(workspacePath, ".collaborator", "thumbnails"));
 }
 
 function ensureWorker(): Worker {
   if (worker) return worker;
 
+  const firstCacheDir = cacheDirs.values().next().value ?? null;
   const w = new Worker(join(__dirname, "image-worker.js"), {
-    workerData: { cacheDir },
+    workerData: { cacheDir: firstCacheDir },
   });
 
   w.on("message", (msg: { id: number; result?: unknown; error?: string }) => {
@@ -76,7 +77,10 @@ function request(
 }
 
 function isInsideCacheDir(path: string): boolean {
-  return cacheDir !== null && isSubpath(cacheDir, path);
+  for (const dir of cacheDirs) {
+    if (isSubpath(dir, path)) return true;
+  }
+  return false;
 }
 
 export function getImageThumbnail(

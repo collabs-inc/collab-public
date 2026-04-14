@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { isSubpath } from "@collab/shared/path-utils";
-import { type FileFilter, isImageFile } from "./file-filter";
+import { type FileFilter, isImageFile, isPdfFile } from "./file-filter";
 
 export interface DirEntry {
   name: string;
@@ -65,7 +65,7 @@ export async function shouldIncludeEntryWithContent(
   }
 
   const fullPath = join(dirPath, entry.name);
-  if (isImageFile(entry.name)) {
+  if (isImageFile(entry.name) || isPdfFile(entry.name)) {
     return true;
   }
 

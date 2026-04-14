@@ -3,13 +3,11 @@ import { join, dirname } from "node:path";
 import { atomicWriteFileSync } from "./files";
 
 export interface WorkspaceConfig {
-  selected_file: string | null;
   expanded_dirs: string[];
   agent_skip_permissions: boolean;
 }
 
 const DEFAULT_CONFIG: WorkspaceConfig = {
-  selected_file: null,
   expanded_dirs: [],
   agent_skip_permissions: false,
 };
@@ -28,7 +26,6 @@ export function loadWorkspaceConfig(
     );
     const parsed = JSON.parse(raw) as Partial<WorkspaceConfig>;
     return {
-      selected_file: parsed.selected_file ?? null,
       expanded_dirs: Array.isArray(parsed.expanded_dirs)
         ? parsed.expanded_dirs
         : [],

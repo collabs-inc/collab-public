@@ -120,17 +120,17 @@ export interface CollabApi {
   getPref: (key: string) => Promise<unknown>;
   setPref: (key: string, value: unknown) => Promise<void>;
   listTerminalTargets: () => Promise<TerminalTargetOption[]>;
-  getWorkspacePref: (key: string) => Promise<unknown>;
+  getWorkspacePref: (key: string, workspacePath: string) => Promise<unknown>;
   setWorkspacePref: (
     key: string,
     value: unknown,
+    workspacePath: string,
   ) => Promise<void>;
 
   // Theme
   setTheme: (mode: string) => Promise<void>;
 
   // File selection
-  getSelectedFile: () => Promise<string | null>;
   selectFile: (path: string | null) => void;
 
   // Folder selection
@@ -194,6 +194,9 @@ export interface CollabApi {
   }) => Promise<TreeNode[]>;
 
   // Workspace
+  workspaceRemoveByPath: (
+    path: string,
+  ) => Promise<{ workspaces: string[] }>;
   getWorkspaceGraph: (params: {
     workspacePath: string;
   }) => Promise<GraphData>;
@@ -262,7 +265,6 @@ export interface CollabApi {
     target?: string;
     backend?: "tmux" | "sidecar";
   } | null>;
-  ptyCleanDetached: (activeSessionIds: string[]) => Promise<void>;
   notifyPtySessionId: (sessionId: string) => void;
   onPtyData: (sessionId: string, cb: PtyDataCb) => void;
   offPtyData: (sessionId: string, cb: PtyDataCb) => void;
@@ -321,8 +323,11 @@ export interface CollabApi {
       }>,
     ) => void,
   ) => Unsubscribe;
-  onWorkspaceChanged: (
-    cb: (workspacePath: string) => void,
+  onWorkspaceAdded: (
+    cb: (path: string) => void,
+  ) => Unsubscribe;
+  onWorkspaceRemoved: (
+    cb: (path: string) => void,
   ) => Unsubscribe;
   onWikilinksUpdated: (
     cb: (paths: string[]) => void,

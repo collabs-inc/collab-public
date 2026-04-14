@@ -3,8 +3,6 @@ import { join } from "node:path";
 import { COLLAB_DIR } from "../paths";
 import { makeEndpointPath } from "../ipc-endpoint";
 
-export const SIDECAR_VERSION = 3;
-
 export const SIDECAR_SOCKET_PATH = makeEndpointPath("pty-sidecar");
 export const SIDECAR_PID_PATH = join(COLLAB_DIR, "pty-sidecar.pid");
 export const SESSION_SOCKET_DIR = join(COLLAB_DIR, "pty-sessions");
@@ -19,8 +17,7 @@ export function sessionSocketPath(sessionId: string): string {
 // Ring buffer default: 8 MB per session
 export const DEFAULT_RING_BUFFER_BYTES = 8 * 1024 * 1024;
 
-// Idle timeout: 30 minutes with no sessions and no clients
-export const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+
 
 // JSON-RPC 2.0 types
 export interface JsonRpcRequest {
@@ -82,7 +79,6 @@ export function makeNotification(
 export interface PidFileData {
   pid: number;
   token: string;
-  version: number;
 }
 
 // session.create params/result
@@ -135,6 +131,5 @@ export interface SessionInfo {
 export interface PingResult {
   pid: number;
   uptime: number;
-  version: number;
   token: string;
 }

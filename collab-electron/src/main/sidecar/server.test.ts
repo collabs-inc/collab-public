@@ -21,7 +21,6 @@ import {
   type SessionCreateResult,
   type SessionReconnectResult,
   type SessionInfo,
-  SIDECAR_VERSION,
 } from "./protocol";
 
 // Use short temp dir to stay under macOS 104-byte sun_path limit
@@ -154,7 +153,6 @@ function createServer(): SidecarServer {
     sessionSocketDir: SESSION_DIR,
     pidFilePath: PID_PATH,
     token: TOKEN,
-    idleTimeoutMs: 0,
   });
 }
 
@@ -261,15 +259,13 @@ describe("SidecarServer", () => {
       sessionSocketDir: SESSION_DIR,
       pidFilePath: PID_PATH,
       token: TOKEN,
-      idleTimeoutMs: 0,
-    });
+      });
     await server.start();
 
     const sock = await connectControl();
     const resp = await rpcCall(sock, 1, "sidecar.ping");
     const result = resp.result as PingResult;
 
-    assert.equal(result.version, SIDECAR_VERSION);
     assert.equal(result.token, TOKEN);
     assert.equal(result.pid, process.pid);
     assert.equal(typeof result.uptime, "number");
@@ -286,8 +282,7 @@ describe("SidecarServer session lifecycle", () => {
       sessionSocketDir: SESSION_DIR,
       pidFilePath: PID_PATH,
       token: TOKEN,
-      idleTimeoutMs: 0,
-    });
+      });
     await server.start();
 
     const sock = await connectControl();
@@ -319,8 +314,7 @@ describe("SidecarServer session lifecycle", () => {
       sessionSocketDir: SESSION_DIR,
       pidFilePath: PID_PATH,
       token: TOKEN,
-      idleTimeoutMs: 0,
-    });
+      });
     await server.start();
 
     const ctrl = await connectControl();
@@ -407,8 +401,7 @@ describe("SidecarServer session lifecycle", () => {
       sessionSocketDir: SESSION_DIR,
       pidFilePath: PID_PATH,
       token: TOKEN,
-      idleTimeoutMs: 0,
-    });
+      });
     await server.start();
 
     const sock = await connectControl();
@@ -439,8 +432,7 @@ describe("SidecarServer session lifecycle", () => {
       sessionSocketDir: SESSION_DIR,
       pidFilePath: PID_PATH,
       token: TOKEN,
-      idleTimeoutMs: 0,
-    });
+      });
     await server.start();
 
     const sock = await connectControl();
@@ -474,8 +466,7 @@ describe("SidecarServer session lifecycle", () => {
       sessionSocketDir: SESSION_DIR,
       pidFilePath: PID_PATH,
       token: TOKEN,
-      idleTimeoutMs: 0,
-    });
+      });
     await server.start();
 
     const ctrl = await connectControl();

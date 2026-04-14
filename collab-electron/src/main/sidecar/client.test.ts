@@ -13,7 +13,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { SidecarServer } from "./server";
 import { SidecarClient } from "./client";
-import { SIDECAR_VERSION, makeNotification } from "./protocol";
+import { makeNotification } from "./protocol";
 
 // Short temp dir to stay under macOS 104-byte sun_path limit
 const TEST_DIR = path.join(os.tmpdir(), `cc-${process.pid}`);
@@ -65,7 +65,6 @@ async function startServer(): Promise<void> {
     sessionSocketDir: SESSION_DIR,
     pidFilePath: PID_PATH,
     token: TOKEN,
-    idleTimeoutMs: 0,
   });
   await server.start();
 }
@@ -106,7 +105,6 @@ describe("SidecarClient", () => {
     await client.connect();
 
     const ping = await client.ping();
-    assert.equal(ping.version, SIDECAR_VERSION);
     assert.equal(ping.token, TOKEN);
   });
 
@@ -271,7 +269,6 @@ describe("SidecarClient", () => {
             result: {
               pid: process.pid,
               uptime: 0,
-              version: SIDECAR_VERSION,
               token: TOKEN,
             },
           }) + "\n");
@@ -290,7 +287,7 @@ describe("SidecarClient", () => {
       // The client should skip the malformed lines and still
       // resolve the valid response
       const result = await fakeClient.ping();
-      assert.equal(result.version, SIDECAR_VERSION);
+      assert.ok(result.token);
       fakeClient.disconnect();
     } finally {
       await new Promise<void>((resolve) =>
@@ -387,7 +384,6 @@ describe("SidecarClient", () => {
             result: {
               pid: process.pid,
               uptime: 0,
-              version: SIDECAR_VERSION,
               token: TOKEN,
             },
           }) + "\n");

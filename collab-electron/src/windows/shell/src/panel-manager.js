@@ -1,16 +1,20 @@
 /**
  * Generic panel factory for left/right sidebar panels.
  *
- * @param {string} side - Panel identifier ("nav", "terminal")
+ * @param {string} side - Panel identifier ("nav", "agent")
  * @param {object} config
  * @param {HTMLElement} config.panel - The panel DOM element
  * @param {HTMLElement} config.resizeHandle - The resize drag handle
  * @param {HTMLElement} config.toggle - The toggle button
- * @param {string} config.label - Human-readable label ("Navigator", "Terminals")
+ * @param {string} config.label - Human-readable label ("Navigator", "Agent")
  * @param {number} config.defaultWidth - Default panel width in pixels
  * @param {1|-1} config.direction - Resize drag direction: 1=left panel, -1=right panel
+ * @param {string[]} [config.validModes] - Ordered list of modes; first must be "closed", second is default open mode
+ * @param {string} [config.defaultMode] - Initial mode when no saved pref exists (defaults to validModes[1])
+ * @param {string} [config.prefKey] - Preference key for persisting the current mode
  * @param {() => Array} [config.getAllWebviews] - Returns all webviews for pointer-event blocking during resize
  * @param {(visible: boolean) => void} [config.onVisibilityChanged] - Called when visibility changes
+ * @param {(mode: string) => void} [config.onModeChanged] - Called when mode changes
  */
 function getPanelConstraints(side) {
 	const s = getComputedStyle(document.documentElement);
@@ -27,11 +31,17 @@ export function createPanel(side, config) {
 	const {
 		panel, resizeHandle, toggle,
 		label, defaultWidth, direction,
+		validModes = ["closed", "files", "tiles"],
+		defaultMode = validModes[1] || "closed",
+		prefKey = "sidebar-mode",
 		getAllWebviews = () => [],
 		onVisibilityChanged = () => {},
+		onModeChanged = () => {},
 	} = config;
 
-	let visible = true;
+	let mode = defaultMode;
+	let lastOpenMode = validModes[1] || "closed";
+	let width = defaultWidth;
 	const prefCache = {};
 
 	function savePref(key, value) {
@@ -52,7 +62,7 @@ export function createPanel(side, config) {
 
 		if (direction === 1) {
 			// Left panel: toggle sits right of the panel
-			if (visible) {
+			if (mode !== "closed") {
 				const rect = panel.getBoundingClientRect();
 				toggle.style.left = `${rect.right + 8}px`;
 			} else {
@@ -61,7 +71,7 @@ export function createPanel(side, config) {
 			toggle.style.right = "";
 		} else {
 			// Right panel: toggle sits left of the panel
-			if (visible) {
+			if (mode !== "closed") {
 				const rect = panel.getBoundingClientRect();
 				toggle.style.right =
 					`${panelsRect.right - rect.left + 8}px`;
@@ -75,6 +85,7 @@ export function createPanel(side, config) {
 	}
 
 	function applyVisibility() {
+		const visible = mode !== "closed";
 		if (visible) {
 			panel.style.display = "";
 			resizeHandle.style.display = "";
@@ -89,9 +100,9 @@ export function createPanel(side, config) {
 		toggle.setAttribute("aria-pressed", String(visible));
 		toggle.setAttribute(
 			"aria-label",
-			visible ? `Hide ${label}` : `Show ${label}`,
+			visible ? `Hide ${label} (${mode})` : `Show ${label}`,
 		);
-		toggle.title = visible ? `Hide ${label}` : `Show ${label}`;
+		toggle.title = visible ? `Hide ${label} (${mode})` : `Show ${label}`;
 		onVisibilityChanged(visible);
 		updateTogglePosition();
 	}
@@ -161,29 +172,78 @@ export function createPanel(side, config) {
 		});
 	}
 
-	function initPrefs(prefWidth, prefVisible) {
+	function initPrefs(prefWidth, prefMode) {
 		if (prefWidth != null) {
-			prefCache[`panel-width-${side}`] = prefWidth;
+			width = Number(prefWidth) || defaultWidth;
+			prefCache[`panel-width-${side}`] = width;
 		}
-		if (prefVisible != null) {
-			prefCache[`panel-visible-${side}`] = prefVisible;
+		if (prefMode != null && validModes.includes(prefMode)) {
+			mode = prefMode;
+		} else {
+			mode = defaultMode;
 		}
-		const storedVisible = prefCache[`panel-visible-${side}`];
-		visible = storedVisible == null ? true : !!storedVisible;
+		applyVisibility();
 	}
 
 	return {
 		applyVisibility,
-		isVisible() { return visible; },
+		getMode() { return mode; },
+		isVisible() { return mode !== "closed"; },
 		toggle() {
-			visible = !visible;
-			savePref(`panel-visible-${side}`, visible);
+			if (mode === "closed") {
+				mode = lastOpenMode || validModes[1] || "closed";
+			} else {
+				lastOpenMode = mode;
+				mode = "closed";
+			}
+			savePref(prefKey, mode);
 			applyVisibility();
+			onModeChanged(mode);
+		},
+		setMode(m) {
+			mode = m;
+			savePref(prefKey, m);
+			applyVisibility();
+			onModeChanged(mode);
 		},
 		setVisible(v) {
-			visible = v;
-			savePref(`panel-visible-${side}`, visible);
+			if (v) {
+				mode = lastOpenMode || validModes[1] || "closed";
+			} else {
+				if (mode !== "closed") lastOpenMode = mode;
+				mode = "closed";
+			}
+			savePref(prefKey, mode);
 			applyVisibility();
+			onModeChanged(mode);
+		},
+		cycle() {
+			const openModes = validModes.filter(m => m !== "closed");
+			if (mode === "closed") {
+				mode = openModes[0] || "closed";
+			} else {
+				const idx = openModes.indexOf(mode);
+				if (idx >= 0 && idx < openModes.length - 1) {
+					mode = openModes[idx + 1];
+				} else {
+					lastOpenMode = mode;
+					mode = "closed";
+				}
+			}
+			savePref(prefKey, mode);
+			applyVisibility();
+			onModeChanged(mode);
+		},
+		toggleToMode(target) {
+			if (mode === target) {
+				lastOpenMode = mode;
+				mode = "closed";
+			} else {
+				mode = target;
+			}
+			savePref(prefKey, mode);
+			applyVisibility();
+			onModeChanged(mode);
 		},
 		updateTogglePosition,
 		setupResize,

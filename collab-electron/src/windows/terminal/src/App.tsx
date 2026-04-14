@@ -70,7 +70,7 @@ function App() {
   const createTab = useCallback(async (): Promise<Session> => {
     const config = await window.api.getConfig();
     const cwd =
-      config?.workspaces?.[config?.active_workspace] || undefined;
+      config?.workspaces?.[0] || undefined;
     const { cols, rows } = estimateTermSize();
     const result = await window.api.ptyCreate(cwd, cols, rows);
     const session: Session = {

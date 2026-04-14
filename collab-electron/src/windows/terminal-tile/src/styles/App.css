@@ -6,13 +6,7 @@ body,
 	width: 100%;
 	height: 100%;
 	overflow: hidden;
-	background: rgb(248, 248, 248);
-}
-
-@media (prefers-color-scheme: dark) {
-	html, body, #root {
-		background: rgb(8, 8, 8);
-	}
+	background: transparent;
 }
 
 #root {}

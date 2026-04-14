@@ -107,6 +107,8 @@ export interface FolderTableData {
 
 export interface AppConfig {
   workspaces: string[];
-  active_workspace: number;
+  expanded_workspaces: string[];
+  window_state: { x: number; y: number; width: number; height: number; isMaximized?: boolean } | null;
+  ui: Record<string, unknown>;
 }
 

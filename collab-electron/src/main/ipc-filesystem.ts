@@ -20,6 +20,7 @@ import {
 } from "./image-service";
 import type { FileFilter } from "./file-filter";
 import * as wikilinkIndex from "./wikilink-index";
+import { workspaceForFile } from "./ipc-workspace";
 import type {
   FolderTableData,
   FolderTableFile,
@@ -27,20 +28,7 @@ import type {
 
 export interface IpcFilesystemContext {
   mainWindow: () => BrowserWindow | null;
-  getActiveWorkspacePath: () => string | null;
-  getWorkspaceConfig: (path: string) => {
-    selected_file: string | null;
-    expanded_dirs: string[];
-    agent_skip_permissions: boolean;
-  };
-  saveWorkspaceConfig: (
-    path: string,
-    config: {
-      selected_file: string | null;
-      expanded_dirs: string[];
-      agent_skip_permissions: boolean;
-    },
-  ) => void;
+  workspaces: () => string[];
   fileFilter: () => FileFilter | null;
   forwardToWebview: (
     target: string,
@@ -79,7 +67,7 @@ export function registerFilesystemHandlers(
     fsReadDir(
       path,
       ctx.fileFilter() ?? undefined,
-      ctx.getActiveWorkspacePath() ?? undefined,
+      workspaceForFile(path, ctx.workspaces()) ?? undefined,
     ),
   );
 
@@ -87,7 +75,7 @@ export function registerFilesystemHandlers(
     countTreeFiles(
       path,
       ctx.fileFilter() ?? undefined,
-      ctx.getActiveWorkspacePath() ?? undefined,
+      workspaceForFile(path, ctx.workspaces()) ?? undefined,
     ),
   );
 
@@ -143,14 +131,6 @@ export function registerFilesystemHandlers(
         newPath,
       );
 
-      const active = ctx.getActiveWorkspacePath();
-      if (active) {
-        const config = ctx.getWorkspaceConfig(active);
-        if (config.selected_file === oldPath) {
-          config.selected_file = newPath;
-          ctx.saveWorkspaceConfig(active, config);
-        }
-      }
       ctx.forwardToWebview(
         "viewer",
         "file-renamed",
@@ -220,15 +200,6 @@ export function registerFilesystemHandlers(
       ctx.trackEvent("file_moved");
       ctx.fileFilter()?.invalidateBinaryCache([oldPath, newPath]);
 
-      const active = ctx.getActiveWorkspacePath();
-      if (active) {
-        const config = ctx.getWorkspaceConfig(active);
-        if (config.selected_file === oldPath) {
-          config.selected_file = newPath;
-          ctx.saveWorkspaceConfig(active, config);
-        }
-      }
-
       ctx.forwardToWebview(
         "viewer",
         "file-renamed",
@@ -252,7 +223,10 @@ export function registerFilesystemHandlers(
       _event,
       folderPath: string,
     ): Promise<FolderTableData> => {
-      const workspace = ctx.getActiveWorkspacePath();
+      const workspace = workspaceForFile(
+        folderPath,
+        ctx.workspaces(),
+      );
       if (!workspace || !workspaceRootMatch(workspace, folderPath)) {
         throw new Error("Folder is outside workspace");
       }
@@ -327,7 +301,7 @@ export function registerFilesystemHandlers(
       resolveImagePath(
         reference,
         fromNotePath,
-        ctx.getActiveWorkspacePath() ?? "",
+        workspaceForFile(fromNotePath, ctx.workspaces()) ?? "",
       ),
   );
 
@@ -339,7 +313,7 @@ export function registerFilesystemHandlers(
       fileName: string,
       buffer: ArrayBuffer,
     ) => {
-      const ws = ctx.getActiveWorkspacePath();
+      const ws = workspaceForFile(noteDir, ctx.workspaces());
       if (!ws || !workspaceRootMatch(ws, noteDir)) {
         throw new Error("Target directory is outside workspace");
       }

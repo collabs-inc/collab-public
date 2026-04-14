@@ -28,6 +28,8 @@ function resolveInput(raw) {
  * @param {(id: string, e?: MouseEvent) => void} callbacks.onFocus
  * @param {((id: string) => void)|null} [callbacks.onOpenInViewer]
  * @param {((id: string, url: string) => void)|null} [callbacks.onNavigate]
+ * @param {((id: string) => void)|null} [callbacks.onRename]
+ * @param {((id: string) => void)|null} [callbacks.onDuplicate]
  */
 export function createTileDOM(tile, callbacks) {
   const container = document.createElement("div");
@@ -179,6 +181,22 @@ export function createTileDOM(tile, callbacks) {
   btnGroup.appendChild(closeBtn);
   titleBar.appendChild(btnGroup);
 
+  if (tile.type === "term") {
+    titleBar.addEventListener("contextmenu", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const selected = await window.shellApi.showContextMenu([
+        { id: "rename", label: "Rename" },
+        { id: "duplicate", label: "Duplicate" },
+      ]);
+      if (selected === "rename" && callbacks.onRename) {
+        callbacks.onRename(tile.id);
+      } else if (selected === "duplicate" && callbacks.onDuplicate) {
+        callbacks.onDuplicate(tile.id);
+      }
+    });
+  }
+
   const contentArea = document.createElement("div");
   contentArea.className = "tile-content";
 
@@ -196,8 +214,9 @@ export function createTileDOM(tile, callbacks) {
 
 export function getTileLabel(tile) {
   if (tile.type === "term") {
+    if (tile.userTitle) return { parent: "", name: tile.userTitle };
+    if (tile.autoTitle) return splitFilepath(tile.autoTitle);
     if (tile.cwd) return splitFilepath(tile.cwd);
-    if (tile.displayName) return { parent: "", name: tile.displayName };
     return { parent: "", name: "Terminal" };
   }
   if (tile.type === "browser") {
@@ -232,6 +251,57 @@ export function updateTileTitle(dom, tile) {
   titleText.appendChild(parentSpan);
   titleText.appendChild(nameSpan);
   titleText.title = tile.filePath || tile.folderPath || tile.cwd || "";
+}
+
+export function startInlineRename(dom, tile, onCommit) {
+  const existing = dom.titleText.parentNode.querySelector(".tile-rename-input");
+  if (existing) return;
+  const titleText = dom.titleText;
+  const currentLabel = getTileLabel(tile);
+  const currentName = currentLabel.parent
+    ? currentLabel.parent + currentLabel.name
+    : currentLabel.name;
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "tile-rename-input";
+  input.value = tile.userTitle ?? currentName;
+  titleText.style.display = "none";
+  titleText.parentNode.insertBefore(input, titleText);
+  input.select();
+  input.focus();
+
+  let committed = false;
+
+  function commit() {
+    if (committed) return;
+    committed = true;
+    const value = input.value.trim();
+    input.remove();
+    titleText.style.display = "";
+    onCommit(value);
+  }
+
+  function cancel() {
+    if (committed) return;
+    committed = true;
+    input.remove();
+    titleText.style.display = "";
+  }
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commit();
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      cancel();
+    }
+    e.stopPropagation();
+  });
+  input.addEventListener("blur", () => commit());
+  input.addEventListener("mousedown", (e) => e.stopPropagation());
 }
 
 /**

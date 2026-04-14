@@ -2,6 +2,7 @@ import ignore, { type Ignore } from "ignore";
 import { open } from "node:fs/promises";
 
 export { IMAGE_EXTENSIONS, isImageFile } from "@collab/shared/image";
+export { isPdfFile } from "@collab/shared/pdf";
 
 const DEFAULT_PATTERNS: string[] = [
   ".git",

@@ -6,6 +6,7 @@ import {
 } from "./canvas-state.js";
 import {
 	createTileDOM, positionTile, updateTileTitle, getTileLabel,
+	startInlineRename,
 } from "./tile-renderer.js";
 import { toCollabFileUrl } from "@collab/shared/collab-file-url";
 import { workspaceRootMatch } from "@collab/shared/path-utils";
@@ -22,9 +23,12 @@ export function createTileManager({
 	onSaveDebounced, onSaveImmediate,
 	onNoteSurfaceFocus, onFocusSurface,
 	onTerminalSessionCreated,
+	onTerminalCwdChanged,
 	onTerminalTileClosed,
+	onTerminalTileResized,
 	onTileFocused,
 	onTileDblClick,
+	onReposition,
 }) {
 	/** @type {Map<string, {container: HTMLElement, contentArea: HTMLElement, titleText: HTMLElement, webview?: HTMLElement}>} */
 	const tileDOMs = new Map();
@@ -62,6 +66,8 @@ export function createTileManager({
 				ptySessionId: t.ptySessionId,
 				url: t.url,
 				zIndex: t.zIndex,
+				userTitle: t.userTitle,
+				autoTitle: t.autoTitle,
 			})),
 			viewport: {
 				panX: viewportState.panX,
@@ -95,6 +101,7 @@ export function createTileManager({
 				viewportState.zoom,
 			);
 		}
+		onReposition?.();
 	}
 
 	// -- Selection visuals --
@@ -223,6 +230,18 @@ export function createTileManager({
 				saveCanvasDebounced();
 				if (onTerminalSessionCreated) {
 					onTerminalSessionCreated(tile);
+				}
+			}
+			if (event.channel === "pty-cwd-changed") {
+				const cwd = event.args[1];
+				if (cwd && cwd !== tile.autoTitle) {
+					tile.cwd = cwd;
+					tile.autoTitle = cwd;
+					updateTileTitle(tileDOMs.get(tile.id), tile);
+					saveCanvasDebounced();
+					if (onTerminalCwdChanged) {
+						onTerminalCwdChanged(cwd);
+					}
 				}
 			}
 		});
@@ -460,6 +479,32 @@ export function createTileManager({
 				spawnBrowserWebview(t);
 				saveCanvasImmediate();
 			},
+			onDuplicate: (id) => {
+				const t = getTile(id);
+				if (!t) return;
+				const gap = 40;
+				const newTile = createCanvasTile("term", t.x + t.width + gap, t.y, {
+					cwd: t.cwd,
+					width: t.width,
+					height: t.height,
+				});
+				spawnTerminalWebview(newTile, true);
+				saveCanvasImmediate();
+			},
+			onRename: (id) => {
+				const t = getTile(id);
+				const d = tileDOMs.get(id);
+				if (!t || !d) return;
+				startInlineRename(d, t, (newTitle) => {
+					if (newTitle === "") {
+						delete t.userTitle;
+					} else {
+						t.userTitle = newTitle;
+					}
+					updateTileTitle(d, t);
+					saveCanvasImmediate();
+				});
+			},
 		});
 
 		// Double-click title bar → center tile in viewport
@@ -509,6 +554,11 @@ export function createTileManager({
 			repositionAllTiles,
 			getAllWebviews,
 			() => focusCanvasTile(tile.id),
+			(t) => {
+				if (t.type === "term" && onTerminalTileResized) {
+					onTerminalTileResized(t.width, t.height);
+				}
+			},
 		);
 
 		tileLayer.appendChild(dom.container);
@@ -542,6 +592,7 @@ export function createTileManager({
 			}
 		}
 		removeTile(id);
+		onReposition?.();
 		saveCanvasImmediate();
 	}
 
@@ -550,7 +601,16 @@ export function createTileManager({
 		const dom = tileDOMs.get(tile.id);
 		if (!dom) return tile;
 
-		if (type === "image") {
+		if (type === "pdf") {
+			const wv = document.createElement("webview");
+			wv.setAttribute("src", toCollabFileUrl(filePath));
+			wv.setAttribute("webpreferences", "contextIsolation=yes, sandbox=yes");
+			wv.style.width = "100%";
+			wv.style.height = "100%";
+			wv.style.border = "none";
+			dom.contentArea.appendChild(wv);
+			dom.webview = wv;
+		} else if (type === "image") {
 			const img = document.createElement("img");
 			img.src = toCollabFileUrl(filePath);
 			img.style.width = "100%";
@@ -629,6 +689,8 @@ export function createTileManager({
 						height: saved.height,
 						zIndex: saved.zIndex,
 						ptySessionId: saved.ptySessionId,
+						userTitle: saved.userTitle,
+						autoTitle: saved.autoTitle,
 					},
 				);
 				spawnTerminalWebview(tile);
@@ -717,6 +779,19 @@ export function createTileManager({
 		}
 	}
 
+	function renameTile(id, newTitle) {
+		const t = getTile(id);
+		if (!t) return;
+		if (newTitle === "") {
+			delete t.userTitle;
+		} else {
+			t.userTitle = newTitle;
+		}
+		const d = tileDOMs.get(id);
+		if (d) updateTileTitle(d, t);
+		saveCanvasImmediate();
+	}
+
 	return {
 		createCanvasTile,
 		closeCanvasTile,
@@ -736,6 +811,7 @@ export function createTileManager({
 		getTileDOMs: () => tileDOMs,
 		getFocusedTileId: () => focusedTileId,
 		setFocusedTileId: (id) => { focusedTileId = id; },
+		renameTile,
 		updateTileForRename,
 		closeTilesForDeletedPaths,
 		broadcastToTileWebviews,

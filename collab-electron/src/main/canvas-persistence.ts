@@ -20,6 +20,8 @@ interface TileState {
   url?: string | null;
   workspacePath?: string;
   ptySessionId?: string;
+  userTitle?: string;
+  autoTitle?: string;
   zIndex: number;
 }
 

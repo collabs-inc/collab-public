@@ -30,9 +30,8 @@ import { SidecarClient } from "./sidecar/client";
 import {
   SIDECAR_SOCKET_PATH,
   SIDECAR_PID_PATH,
-  SIDECAR_VERSION,
-  type PidFileData,
 } from "./sidecar/protocol";
+import { COLLAB_DIR } from "./paths";
 import { resolveTerminalTarget } from "./terminal-target";
 
 interface PtySession {
@@ -226,23 +225,11 @@ export async function ensureSidecar(): Promise<void> {
 async function doEnsureSidecar(): Promise<void> {
   let needsSpawn = false;
   try {
-    const pidRaw = fs.readFileSync(SIDECAR_PID_PATH, "utf-8");
-    const pidData = JSON.parse(pidRaw) as PidFileData;
-
+    fs.readFileSync(SIDECAR_PID_PATH, "utf-8");
     const client = new SidecarClient(SIDECAR_SOCKET_PATH);
     await client.connect();
-    const ping = await client.ping();
-
-    if (
-      ping.token !== pidData.token ||
-      ping.version !== SIDECAR_VERSION
-    ) {
-      try { await client.shutdownSidecar(); } catch {}
-      client.disconnect();
-      needsSpawn = true;
-    } else {
-      sidecarClient = client;
-    }
+    await client.ping();
+    sidecarClient = client;
   } catch {
     needsSpawn = true;
   }
@@ -404,6 +391,83 @@ function attachClient(
   return ptyProcess;
 }
 
+const ZSH_INTEGRATION_DIR = path.join(COLLAB_DIR, "shell-integration", "zsh");
+
+function ensureZshIntegrationDir(): string | null {
+  try {
+    fs.mkdirSync(ZSH_INTEGRATION_DIR, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(ZSH_INTEGRATION_DIR, ".zshenv"),
+      '[ -f "${_COLLAB_ZDOTDIR:-$HOME}/.zshenv" ] && '
+        + '. "${_COLLAB_ZDOTDIR:-$HOME}/.zshenv"\n',
+    );
+
+    fs.writeFileSync(
+      path.join(ZSH_INTEGRATION_DIR, ".zprofile"),
+      '[ -f "${_COLLAB_ZDOTDIR:-$HOME}/.zprofile" ] && '
+        + '. "${_COLLAB_ZDOTDIR:-$HOME}/.zprofile"\n',
+    );
+
+    fs.writeFileSync(
+      path.join(ZSH_INTEGRATION_DIR, ".zshrc"),
+      [
+        '_collab_zd="${_COLLAB_ZDOTDIR:-$HOME}"',
+        'ZDOTDIR="$_collab_zd"',
+        "unset _COLLAB_ZDOTDIR",
+        '[ -f "$_collab_zd/.zshrc" ] && . "$_collab_zd/.zshrc"',
+        "unset _collab_zd",
+        '__collab_osc7() { printf "\\e]7;file://%s%s\\a" "$HOST" "$PWD" }',
+        "precmd_functions+=(__collab_osc7)",
+        "",
+      ].join("\n"),
+    );
+
+    fs.writeFileSync(
+      path.join(ZSH_INTEGRATION_DIR, ".zlogin"),
+      '[ -f "${ZDOTDIR:-$HOME}/.zlogin" ] && '
+        + '. "${ZDOTDIR:-$HOME}/.zlogin"\n',
+    );
+
+    return ZSH_INTEGRATION_DIR;
+  } catch {
+    return null;
+  }
+}
+
+function osc7ShellHook(shell: string): string | null {
+  const base = path.basename(shell);
+  if (base === "zsh") {
+    return [
+      " __collab_osc7()",
+      '{ printf "\\e]7;file://%s%s\\a" "$HOST" "$PWD"; };',
+      "precmd_functions+=(__collab_osc7);",
+      "clear",
+    ].join(" ");
+  }
+  if (base === "bash" || base === "sh") {
+    return [
+      ' PROMPT_COMMAND=\'printf "\\e]7;file://%s%s\\a"',
+      '"$HOSTNAME" "$PWD"\'${PROMPT_COMMAND:+";$PROMPT_COMMAND"};',
+      "clear",
+    ].join(" ");
+  }
+  // fish emits OSC 7 by default — no hook needed
+  return null;
+}
+
+function injectOsc7Hook(
+  sessionId: string,
+  shell: string,
+): void {
+  const hook = osc7ShellHook(shell);
+  if (!hook) return;
+  // Delay to let the shell start and show its first prompt
+  setTimeout(() => {
+    writeToSession(sessionId, hook + "\n");
+  }, 300);
+}
+
 export async function createSession(
   cwd?: string,
   senderWebContentsId?: number,
@@ -432,6 +496,23 @@ export async function createSession(
     const sessionId = crypto.randomBytes(8).toString("hex");
     const name = tmuxSessionName(sessionId);
     const shellName = displayBasename(shell) || "shell";
+    const shellBase = path.basename(shell);
+
+    let zshIntegrated = false;
+    if (shellBase === "zsh") {
+      const dir = ensureZshIntegrationDir();
+      if (dir) {
+        const origZd = process.env.ZDOTDIR
+          || process.env.HOME || os.homedir();
+        try {
+          tmuxExec("set-environment", "-g", "ZDOTDIR", dir);
+          tmuxExec("set-environment", "-g", "_COLLAB_ZDOTDIR", origZd);
+          zshIntegrated = true;
+        } catch {
+          // Fall back to injection below
+        }
+      }
+    }
 
     tmuxExec(
       "new-session", "-d",
@@ -440,6 +521,15 @@ export async function createSession(
       "-x", String(c),
       "-y", String(r),
     );
+
+    if (zshIntegrated) {
+      try {
+        tmuxExec("set-environment", "-gu", "ZDOTDIR");
+        tmuxExec("set-environment", "-gu", "_COLLAB_ZDOTDIR");
+      } catch {
+        // Non-fatal cleanup
+      }
+    }
 
     tmuxExec("set-environment", "-t", name, "COLLAB_PTY_SESSION_ID", sessionId);
     if (tileId) {
@@ -459,6 +549,10 @@ export async function createSession(
     const session = sessions.get(sessionId)!;
     session.shell = shell;
     session.displayName = shellName;
+
+    if (!zshIntegrated) {
+      injectOsc7Hook(sessionId, shell);
+    }
 
     return {
       sessionId,
@@ -480,6 +574,18 @@ export async function createSession(
   const client = getSidecarClient();
   const sidecarEnv = utf8Env();
   if (tileId) sidecarEnv.COLLAB_TILE_ID = tileId;
+
+  let zshIntegrated = false;
+  if (path.basename(resolvedTarget.command) === "zsh") {
+    const dir = ensureZshIntegrationDir();
+    if (dir) {
+      sidecarEnv._COLLAB_ZDOTDIR = process.env.ZDOTDIR
+        || process.env.HOME || os.homedir();
+      sidecarEnv.ZDOTDIR = dir;
+      zshIntegrated = true;
+    }
+  }
+
   const createParams = withOptionalFields({
     command: resolvedTarget.command,
     args: resolvedTarget.args,
@@ -525,6 +631,11 @@ export async function createSession(
   if (resolvedTarget.target === "powershell") {
     sidecarPowerShellSessionIds.add(sessionId);
   }
+
+  if (!zshIntegrated) {
+    injectOsc7Hook(sessionId, resolvedTarget.command);
+  }
+
   return withOptionalFields({
     sessionId,
     shell: resolvedTarget.command,
@@ -812,21 +923,19 @@ export function killAllAndWait(): Promise<void> {
 }
 
 export function destroyAll(): void {
-  const hadLegacySessions = sessions.size > 0;
+  const ownedNames = [...sessions.keys()].map(
+    (id) => tmuxSessionName(id),
+  );
   killAll();
-  if (hadLegacySessions) {
+  for (const name of ownedNames) {
     try {
-      tmuxExec("kill-server");
+      tmuxExec("kill-session", "-t", name);
     } catch {
-      // Server may not be running
+      // Session may already be gone
     }
   }
 }
 
-/**
- * Shut down the sidecar if it has no remaining sessions.
- * Called during app quit so the detached process doesn't linger.
- */
 export async function shutdownSidecarIfIdle(): Promise<void> {
   if (!sidecarClient) return;
   try {
@@ -848,27 +957,29 @@ export interface DiscoveredSession {
 export async function discoverSessions(): Promise<DiscoveredSession[]> {
   const result: DiscoveredSession[] = [];
 
-  try {
-    await ensureSidecar();
-    const client = getSidecarClient();
-    const list = await client.listSessions();
-    result.push(...list.map((s) => ({
-      sessionId: s.sessionId,
-      meta: withOptionalFields({
-        shell: s.shell,
-        cwd: s.cwdHostPath,
-        createdAt: s.createdAt,
-        backend: "sidecar",
-        target: s.target,
-        displayName: s.displayName,
-        command: s.shell,
-        cwdHostPath: s.cwdHostPath,
-      }, {
-        cwdGuestPath: s.cwdGuestPath,
-      }) as SessionMeta,
-    })));
-  } catch {
-    // Sidecar is not running; continue with any legacy tmux sessions.
+  if (getTerminalMode() !== "tmux") {
+    try {
+      await ensureSidecar();
+      const client = getSidecarClient();
+      const list = await client.listSessions();
+      result.push(...list.map((s) => ({
+        sessionId: s.sessionId,
+        meta: withOptionalFields({
+          shell: s.shell,
+          cwd: s.cwdHostPath,
+          createdAt: s.createdAt,
+          backend: "sidecar",
+          target: s.target,
+          displayName: s.displayName,
+          command: s.shell,
+          cwdHostPath: s.cwdHostPath,
+        }, {
+          cwdGuestPath: s.cwdGuestPath,
+        }) as SessionMeta,
+      })));
+    } catch {
+      // Sidecar not running; continue with tmux-only discovery.
+    }
   }
 
   let tmuxNames: string[];
@@ -909,16 +1020,6 @@ export async function discoverSessions(): Promise<DiscoveredSession[]> {
       tmuxSet.delete(name);
     } else {
       deleteSessionMeta(sessionId);
-    }
-  }
-
-  for (const orphan of tmuxSet) {
-    if (orphan.startsWith("collab-")) {
-      try {
-        tmuxExec("kill-session", "-t", orphan);
-      } catch {
-        // Already dead
-      }
     }
   }
 
@@ -1031,44 +1132,6 @@ export function clearForegroundCache(sessionId: string): void {
   if (timer) {
     clearTimeout(timer);
     statusTimers.delete(sessionId);
-  }
-}
-
-function getAttachedSessionNames(): Set<string> {
-  try {
-    const raw = tmuxExec(
-      "list-sessions", "-F",
-      "#{session_name}:#{session_attached}",
-    );
-    const attached = new Set<string>();
-    for (const line of raw.split("\n").filter(Boolean)) {
-      const sep = line.lastIndexOf(":");
-      const name = line.slice(0, sep);
-      const count = parseInt(line.slice(sep + 1), 10);
-      if (count > 0) attached.add(name);
-    }
-    return attached;
-  } catch {
-    return new Set();
-  }
-}
-
-export async function cleanDetachedSessions(
-  activeSessionIds: string[],
-): Promise<void> {
-  const active = new Set(activeSessionIds);
-  const attached = getAttachedSessionNames();
-  const discovered = await discoverSessions();
-
-  for (const { sessionId, meta } of discovered) {
-    if (active.has(sessionId)) continue;
-    if (
-      (meta.backend ?? "tmux") === "tmux"
-      && attached.has(tmuxSessionName(sessionId))
-    ) {
-      continue;
-    }
-    await killSession(sessionId);
   }
 }
 

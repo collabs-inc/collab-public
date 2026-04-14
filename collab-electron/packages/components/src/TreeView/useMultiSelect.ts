@@ -20,7 +20,7 @@ interface UseMultiSelectReturn {
 }
 
 export function useMultiSelect(
-	flatItems: FlatItem[],
+	getFlatItems: () => FlatItem[],
 	onItemClick: (path: string) => void,
 ): UseMultiSelectReturn {
 	const [state, setState] = useState<MultiSelectState>({
@@ -54,7 +54,7 @@ export function useMultiSelect(
 			}
 
 			if (e.shiftKey && stateRef.current.anchor) {
-				const allPaths = flatItems
+				const allPaths = getFlatItems()
 					.filter((item) => item.kind === 'file')
 					.map((item) => item.path);
 				const anchorIdx = allPaths.indexOf(
@@ -83,7 +83,7 @@ export function useMultiSelect(
 			});
 			onItemClick(path);
 		},
-		[flatItems, onItemClick],
+		[getFlatItems, onItemClick],
 	);
 
 	const isSelected = useCallback(

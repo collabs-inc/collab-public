@@ -16,6 +16,8 @@ import "@collab/components/Editor/WikiLink.css";
 import { CodeEditorView } from "@collab/components/CodeEditorView";
 import "@collab/components/CodeEditorView/CodeEditorView.css";
 import { isImageFile } from "@collab/shared/image";
+import { isPdfFile } from "@collab/shared/pdf";
+import { toCollabFileUrl } from "@collab/shared/collab-file-url";
 import { extractCoverImageUrl } from "@collab/shared/extract-cover-image";
 import { ImageView } from "@collab/components/ImageView/ImageView";
 import "./styles/App.css";
@@ -114,8 +116,7 @@ export default function App() {
 	// Load workspace path on mount
 	useEffect(() => {
 		window.api.getConfig().then((config) => {
-			const active =
-				config.workspaces?.[config.active_workspace];
+			const active = config.workspaces?.[0];
 			if (active) setWorkspacePath(active);
 		});
 	}, []);
@@ -126,24 +127,25 @@ export default function App() {
 		});
 	}, []);
 
-	// Keep workspace path in sync when changed via settings (singleton viewer only)
+	// Keep workspace path in sync when workspaces change (singleton viewer only)
 	useEffect(() => {
 		if (isTileMode) return;
-		return window.api.onWorkspaceChanged((newPath) => {
-			setWorkspacePath((prev) => {
-				if (prev !== newPath) setSelectedPath(null);
-				return newPath;
+		const refresh = () => {
+			window.api.getConfig().then((config) => {
+				const active = config.workspaces?.[0];
+				setWorkspacePath((prev) => {
+					if (prev !== (active ?? null)) setSelectedPath(null);
+					return active ?? null;
+				});
 			});
-		});
+		};
+		const unsub1 = window.api.onWorkspaceAdded(refresh);
+		const unsub2 = window.api.onWorkspaceRemoved(refresh);
+		return () => { unsub1(); unsub2(); };
 	}, []);
 
-	// Restore persisted file selection on mount (singleton viewer only)
-	useEffect(() => {
-		if (isTileMode) return;
-		window.api.getSelectedFile().then((path) => {
-			if (path) setSelectedPath(path);
-		});
-	}, []);
+	// File selection is now restored via the onFileSelected IPC event
+	// sent by the shell on mount — no separate getSelectedFile needed.
 
 	// Listen for file selection from nav view (singleton viewer only)
 	useEffect(() => {
@@ -213,7 +215,7 @@ export default function App() {
 
 	// Re-read file content when it changes on disk
 	useEffect(() => {
-		if (!selectedPath || isImageFile(selectedPath)) return;
+		if (!selectedPath || isImageFile(selectedPath) || isPdfFile(selectedPath)) return;
 
 		return window.api.onFsChanged((events) => {
 			const currentPath = selectedPathRef.current;
@@ -246,7 +248,7 @@ export default function App() {
 	useEffect(() => {
 		const onFocus = () => {
 			const currentPath = selectedPathRef.current;
-			if (!currentPath || isImageFile(currentPath)) return;
+			if (!currentPath || isImageFile(currentPath) || isPdfFile(currentPath)) return;
 
 			window.api.getFileStats(currentPath).then((stats) => {
 				if (fileMtimeRef.current && stats.mtime !== fileMtimeRef.current) {
@@ -299,7 +301,7 @@ export default function App() {
 			setFileError(null);
 		}
 
-		if (isImageFile(path)) {
+		if (isImageFile(path) || isPdfFile(path)) {
 			setFileContent("");
 			setLoadedPath(path);
 			setFileError(null);
@@ -500,6 +502,9 @@ export default function App() {
 	const displayedIsImage = displayedPath
 		? isImageFile(displayedPath)
 		: false;
+	const displayedIsPdf = displayedPath
+		? isPdfFile(displayedPath)
+		: false;
 	const showFileLoading =
 		!!selectedPath &&
 		!displayedPath &&
@@ -513,13 +518,18 @@ export default function App() {
 		!!displayedPath &&
 		!fileError &&
 		displayedIsImage;
+	const hasPdfFile =
+		!!displayedPath &&
+		!fileError &&
+		displayedIsPdf;
 	const hasCodeFile =
 		!!displayedPath &&
 		!fileError &&
 		!displayedIsMarkdown &&
-		!displayedIsImage;
+		!displayedIsImage &&
+		!displayedIsPdf;
 	const hasFile =
-		hasMarkdownFile || hasCodeFile || hasImageFile || showFileLoading;
+		hasMarkdownFile || hasCodeFile || hasImageFile || hasPdfFile || showFileLoading;
 	const hasFolder = !!focusedFolder && !selectedPath;
 	const headerPath = showFileLoading
 		? selectedPath
@@ -607,6 +617,14 @@ export default function App() {
 							className={isTileMode ? "canvas-tile-embed" : undefined}
 						/>
 					</>
+				)}
+				{hasPdfFile && displayedPath && (
+					<iframe
+						src={toCollabFileUrl(displayedPath)}
+						sandbox="allow-same-origin"
+						style={{ width: "100%", height: "100%", border: "none" }}
+						title={displayedPath}
+					/>
 				)}
 			</main>
 		</div>

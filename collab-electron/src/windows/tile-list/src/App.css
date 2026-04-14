@@ -1,0 +1,86 @@
+:root {
+  --nav-inset: 12px;
+  --focus-bg: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--foreground);
+  background: transparent;
+  overflow-y: auto;
+  overflow-x: hidden;
+  user-select: none;
+}
+
+.tile-list { display: flex; flex-direction: column; padding: 4px 0; }
+
+.tile-search { padding: 6px var(--nav-inset); }
+
+.tile-search-input {
+  width: 100%;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  border: none;
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: inherit;
+  outline: none;
+  font-family: inherit;
+}
+
+.tile-search-input::placeholder { color: var(--muted-foreground); }
+
+.tile-entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px var(--nav-inset);
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 80ms ease;
+}
+
+.tile-entry:hover { background: var(--focus-bg); }
+.tile-entry.focused { background: var(--focus-bg); }
+
+.tile-icon {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tile-icon svg { display: block; }
+
+.tile-title {
+  font-weight: 400;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.tile-rename-input {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--background);
+  color: inherit;
+  border: 1px solid var(--primary);
+  border-radius: 2px;
+  padding: 0 4px;
+  outline: none;
+  min-width: 0;
+  flex: 1;
+  height: 1.4em;
+}
+
+.tile-empty { padding: 12px var(--nav-inset); color: var(--muted-foreground); font-size: 11px; }

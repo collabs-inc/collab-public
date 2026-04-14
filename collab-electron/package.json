@@ -1,6 +1,6 @@
 {
 	"name": "@collaborator/electron",
-	"version": "0.6.2",
+	"version": "0.7.2",
 	"private": true,
 	"license": "FSL-1.1-ALv2",
 	"type": "module",
@@ -85,16 +85,6 @@
 			"entitlements": "build/entitlements.mac.plist",
 			"entitlementsInherit": "build/entitlements.mac.plist",
 			"artifactName": "${productName}-${version}-${arch}-mac.${ext}",
-			"extraResources": [
-				{
-					"from": "vendor/tmux/tmux",
-					"to": "tmux"
-				},
-				{
-					"from": "vendor/tmux/lib",
-					"to": "lib"
-				}
-			],
 			"extendInfo": {
 				"NSMicrophoneUsageDescription": "Collaborator needs microphone access to enable voice input for CLI tools like Claude Code."
 			},

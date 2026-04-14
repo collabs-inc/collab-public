@@ -13,6 +13,7 @@ interface SearchSortControlsProps {
 	sortMode: SortMode;
 	onCycleSortMode: () => void;
 	searchPlaceholder?: string;
+	searchShortcut?: string;
 	leadingContent?: React.ReactNode;
 	onArrowNav?: (direction: 'up' | 'down', shiftKey: boolean) => void;
 }
@@ -26,6 +27,7 @@ export const SearchSortControls = React.forwardRef<
 	sortMode,
 	onCycleSortMode,
 	searchPlaceholder = 'Search...',
+	searchShortcut,
 	leadingContent,
 	onArrowNav,
 }, ref) => {
@@ -74,7 +76,7 @@ export const SearchSortControls = React.forwardRef<
 					className="search-input"
 					aria-label="Search files"
 				/>
-				{searchQuery && (
+				{searchQuery ? (
 					<button
 						type="button"
 						className="search-clear"
@@ -83,7 +85,9 @@ export const SearchSortControls = React.forwardRef<
 					>
 						&times;
 					</button>
-				)}
+				) : searchShortcut ? (
+					<kbd className="search-shortcut-kbd">{searchShortcut}</kbd>
+				) : null}
 			</div>
 			<button
 				type="button"

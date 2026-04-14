@@ -8,6 +8,7 @@ button {
 
 :root {
 	--top-spacing: 0px;
+	--nav-inset: 12px;
 	--card: rgb(242, 242, 242);
 	--color-primary: var(--primary);
 	--color-text-secondary: color-mix(in srgb, var(--muted-foreground) 75%, var(--foreground) 25%);
@@ -59,42 +60,8 @@ body {
 	padding-bottom: 0;
 }
 
-/* View mode toggle (tree/feed) */
-.nav-view-toggle {
-	display: flex;
-	align-items: center;
-	gap: 0;
-	padding: 0;
-	flex-shrink: 0;
-}
-
-.nav-view-toggle-button {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 22px;
-	height: 20px;
-	background: transparent;
-	border: none;
-	border-radius: 4px;
-	color: var(--muted-foreground);
-	cursor: pointer;
-	transition: color 0.15s, background-color 0.15s;
-	opacity: 0.5;
-}
-
-.nav-view-toggle-button:hover {
-	color: var(--foreground);
-	opacity: 0.8;
-}
-
-.nav-view-toggle-button.active {
-	color: var(--foreground);
-	opacity: 1;
-}
-
 .workspace-content {
-	padding: 6px 4px 0px 6px;
+	padding: 6px var(--nav-inset) 0px var(--nav-inset);
 	display: flex;
 	flex-direction: column;
 	flex: 1;
@@ -159,6 +126,50 @@ button {
 
 .scrollbar-hover:hover::-webkit-scrollbar-thumb:hover {
 	background: var(--scrollbar-thumb-hover);
+}
+
+/* Add workspace button */
+.workspace-add-row {
+	padding: 0 0 8px 0;
+	flex-shrink: 0;
+}
+
+.ws-add-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	gap: 4px;
+	font-size: 0.8rem;
+	font-weight: 400;
+	color: var(--muted-foreground);
+	background: none;
+	border: 1px dashed color-mix(in srgb, var(--foreground) 20%, transparent);
+	border-radius: 999px;
+	padding: 6px 10px;
+	cursor: pointer;
+	line-height: 1.4;
+	transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.ws-add-kbd {
+	background: color-mix(in srgb, var(--foreground) 8%, transparent);
+	border: 1px solid color-mix(in srgb, var(--foreground) 6%, transparent);
+	border-radius: 3px;
+	padding: 1px 5px;
+	font-size: 0.7rem;
+	font-family: var(--font-mono);
+	color: color-mix(in srgb, var(--foreground) 40%, transparent);
+	margin-left: 4px;
+}
+
+.ws-add-btn:hover {
+	color: var(--foreground);
+	border-color: var(--foreground);
+}
+
+.ws-add-btn:active {
+	opacity: 0.7;
 }
 
 /* Create Item Modal */
@@ -266,6 +277,28 @@ button {
 	cursor: not-allowed;
 	box-shadow: none;
 	transform: none;
+}
+
+/* ── Tooltips (matches shell tooltip style) ── */
+
+.nav-tooltip {
+	position: fixed;
+	z-index: 10000;
+	background: rgb(50, 50, 50);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 6px;
+	padding: 5px 10px;
+	font-size: 12px;
+	color: rgb(220, 220, 220);
+	white-space: nowrap;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.15s ease-in-out;
+}
+
+.nav-tooltip.visible {
+	opacity: 1;
 }
 
 @media (prefers-color-scheme: dark) {

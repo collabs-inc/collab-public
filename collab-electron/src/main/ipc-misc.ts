@@ -11,12 +11,11 @@ import { importWebArticle } from "./import-service";
 import * as agentActivity from "./agent-activity";
 import { registerMethod } from "./json-rpc-server";
 import { DISABLE_GIT_REPLAY } from "@collab/shared/replay-types";
+import { workspaceForFile } from "./ipc-workspace";
 
 interface IpcContext {
   mainWindow: () => BrowserWindow | null;
-  getActiveWorkspacePath: () => string | null;
-  getWorkspaceConfig: (path: string) => any;
-  fileFilter: () => any | null;
+  workspaces: () => string[];
   forwardToWebview: (
     target: string,
     channel: string,
@@ -172,9 +171,12 @@ export function registerMiscHandlers(
   ipcMain.handle(
     "import:web-article",
     async (_event, url: string, targetDir: string) => {
-      const ws = ctx.getActiveWorkspacePath();
+      const ws = workspaceForFile(
+        targetDir,
+        ctx.workspaces(),
+      );
       if (!ws) {
-        throw new Error("No active workspace");
+        throw new Error("No workspace found for target directory");
       }
       const articleResult = await importWebArticle(
         url,

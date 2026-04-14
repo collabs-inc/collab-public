@@ -172,6 +172,8 @@ const cmdOrCtrl = (input: Electron.Input): boolean =>
   input.meta || input.control;
 const shiftCmdOrCtrl = (input: Electron.Input): boolean =>
   input.shift && (input.meta || input.control);
+const altCmdOrCtrl = (input: Electron.Input): boolean =>
+  input.alt && (input.meta || input.control);
 const ctrlOnly = (input: Electron.Input): boolean =>
   input.control && !input.meta;
 
@@ -180,22 +182,24 @@ interface ShortcutEntry {
   action: string;
 }
 
-const TOGGLE_SHORTCUTS: Record<string, ShortcutEntry> = {
-  Backslash: { modifier: cmdOrCtrl, action: "toggle-nav" },
-  Backquote: { modifier: cmdOrCtrl, action: "toggle-terminal-list" },
-  Comma: { modifier: cmdOrCtrl, action: "toggle-settings" },
-  KeyO: { modifier: shiftCmdOrCtrl, action: "add-workspace" },
-  KeyK: { modifier: cmdOrCtrl, action: "focus-search" },
-  KeyN: { modifier: cmdOrCtrl, action: "new-tile" },
-  KeyW: { modifier: cmdOrCtrl, action: "close-tile" },
+const TOGGLE_SHORTCUTS: Record<string, ShortcutEntry[]> = {
+  KeyB: [
+    { modifier: altCmdOrCtrl, action: "toggle-agent" },
+    { modifier: cmdOrCtrl, action: "sidebar-files" },
+  ],
+  Backslash: [{ modifier: cmdOrCtrl, action: "sidebar-files" }],
+  Comma: [{ modifier: cmdOrCtrl, action: "toggle-settings" }],
+  KeyO: [{ modifier: shiftCmdOrCtrl, action: "add-workspace" }],
+  KeyK: [{ modifier: cmdOrCtrl, action: "focus-file-search" }],
+  KeyN: [{ modifier: cmdOrCtrl, action: "new-tile" }],
+  KeyW: [{ modifier: cmdOrCtrl, action: "close-tile" }],
 };
 
-const TOGGLE_SHORTCUT_KEYS: Record<string, ShortcutEntry> = {
-  "\\": TOGGLE_SHORTCUTS.Backslash!,
-  "`": TOGGLE_SHORTCUTS.Backquote!,
+const TOGGLE_SHORTCUT_KEYS: Record<string, ShortcutEntry[]> = {
   ",": TOGGLE_SHORTCUTS.Comma!,
   o: TOGGLE_SHORTCUTS.KeyO!,
   k: TOGGLE_SHORTCUTS.KeyK!,
+  b: TOGGLE_SHORTCUTS.KeyB!,
   n: TOGGLE_SHORTCUTS.KeyN!,
   w: TOGGLE_SHORTCUTS.KeyW!,
 };
@@ -208,12 +212,11 @@ function normalizeShortcutKey(key: string | undefined): string | null {
 function resolveToggleShortcut(
   input: Electron.Input,
 ): ShortcutEntry | undefined {
-  const shortcut = TOGGLE_SHORTCUTS[input.code];
-  if (shortcut) return shortcut;
-  const normalizedKey = normalizeShortcutKey(input.key);
-  return normalizedKey
-    ? TOGGLE_SHORTCUT_KEYS[normalizedKey]
-    : undefined;
+  const candidates = TOGGLE_SHORTCUTS[input.code]
+    ?? (normalizeShortcutKey(input.key)
+      ? TOGGLE_SHORTCUT_KEYS[normalizeShortcutKey(input.key)!]
+      : undefined);
+  return candidates?.find((s) => s.modifier(input));
 }
 
 function attachShortcutListener(target: WebContents): void {
@@ -221,7 +224,7 @@ function attachShortcutListener(target: WebContents): void {
     if (input.type !== "keyDown") return;
 
     const toggle = resolveToggleShortcut(input);
-    if (toggle && toggle.modifier(input)) {
+    if (toggle) {
       event.preventDefault();
       if (!input.isAutoRepeat) sendShortcut(toggle.action);
     }
@@ -274,6 +277,10 @@ function registerToggleShortcuts(win: BrowserWindow): void {
 
   win.webContents.on("did-attach-webview", (_event, wc) => {
     wc.once("did-finish-load", () => {
+      // Transparent compositor surface so terminal tiles can
+      // show through to the canvas/vibrancy background.
+      wc.insertCSS("html, body { background: transparent !important; }");
+
       attachShortcutListener(wc);
       if (isBrowserTileWebview(wc)) {
         attachBrowserShortcuts(wc, win);
@@ -361,7 +368,7 @@ function buildAppMenu(): void {
           label: "Find",
           accelerator: "CommandOrControl+K",
           registerAccelerator: false,
-          click: () => sendShortcut("focus-search"),
+          click: () => sendShortcut("focus-file-search"),
         },
       ],
     },
@@ -369,16 +376,16 @@ function buildAppMenu(): void {
       label: "View",
       submenu: [
         {
-          label: "Toggle Navigator",
-          accelerator: "CommandOrControl+\\",
+          label: "Toggle Files",
+          accelerator: "CommandOrControl+B",
           registerAccelerator: false,
-          click: () => sendShortcut("toggle-nav"),
+          click: () => sendShortcut("sidebar-files"),
         },
         {
-          label: "Toggle Terminal List",
-          accelerator: "CommandOrControl+`",
+          label: "Toggle Agent",
+          accelerator: "CommandOrControl+Alt+B",
           registerAccelerator: false,
-          click: () => sendShortcut("toggle-terminal-list"),
+          click: () => sendShortcut("toggle-agent"),
         },
         { type: "separator" },
         {
@@ -512,6 +519,10 @@ ipcMain.on("analytics:track-event", (_event, name, properties) => {
   trackEvent(name, properties);
 });
 
+ipcMain.on("get-home-path", (event) => {
+  event.returnValue = app.getPath("home");
+});
+
 ipcMain.handle("shell:get-view-config", () => {
   const preload = pathToFileURL(
     getPreloadPath("universal"),
@@ -524,7 +535,7 @@ ipcMain.handle("shell:get-view-config", () => {
     terminalTile: { src: getRendererURL("terminal-tile"), preload },
     graphTile: { src: getRendererURL("graph-tile"), preload },
     settings: { src: getRendererURL("settings"), preload },
-    terminalList: { src: getRendererURL("terminal-list"), preload },
+    tileList: { src: getRendererURL("tile-list"), preload },
   };
 });
 
@@ -660,12 +671,6 @@ ipcMain.handle(
 ipcMain.handle(
   "pty:read-meta",
   (_event, sessionId: string) => readSessionMeta(sessionId),
-);
-
-ipcMain.handle(
-  "pty:clean-detached",
-  (_event, activeSessionIds: string[]) =>
-    pty.cleanDetachedSessions(activeSessionIds),
 );
 
 ipcMain.handle(

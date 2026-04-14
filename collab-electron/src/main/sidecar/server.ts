@@ -12,7 +12,6 @@ import {
   makeError,
   makeNotification,
   DEFAULT_RING_BUFFER_BYTES,
-  SIDECAR_VERSION,
   sessionSocketPath as buildSessionSocketPath,
   type JsonRpcRequest,
   type SessionCreateParams,
@@ -29,7 +28,6 @@ interface ServerOptions {
   sessionSocketDir: string;
   pidFilePath: string;
   token: string;
-  idleTimeoutMs?: number;
   ringBufferBytes?: number;
 }
 
@@ -60,13 +58,11 @@ export class SidecarServer {
   private controlClients = new Set<net.Socket>();
   private sessions = new Map<string, Session>();
   private startTime = Date.now();
-  private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly opts: Required<ServerOptions>;
 
   constructor(opts: ServerOptions) {
     this.opts = {
       ...opts,
-      idleTimeoutMs: opts.idleTimeoutMs ?? 0,
       ringBufferBytes: opts.ringBufferBytes ?? DEFAULT_RING_BUFFER_BYTES,
     };
   }
@@ -167,7 +163,6 @@ export class SidecarServer {
     const pidData: PidFileData = {
       pid: process.pid,
       token: this.opts.token,
-      version: SIDECAR_VERSION,
     };
     fs.writeFileSync(
       this.opts.pidFilePath,
@@ -181,11 +176,9 @@ export class SidecarServer {
       this.controlServer.listen(this.opts.controlSocketPath, resolve);
     });
 
-    this.resetIdleTimer();
   }
 
   async shutdown(): Promise<void> {
-    if (this.idleTimer) clearTimeout(this.idleTimer);
 
     // Shut down all sessions before closing the control server so tests and
     // non-exit-driven callers do not hang on still-open data servers.
@@ -244,7 +237,6 @@ export class SidecarServer {
 
   private handleControlClient(sock: net.Socket): void {
     this.controlClients.add(sock);
-    this.resetIdleTimer();
     let buf = "";
 
     sock.on("data", (chunk) => {
@@ -259,7 +251,6 @@ export class SidecarServer {
 
     sock.on("close", () => {
       this.controlClients.delete(sock);
-      this.resetIdleTimer();
     });
 
     sock.on("error", () => {
@@ -324,7 +315,6 @@ export class SidecarServer {
     const result: PingResult = {
       pid: process.pid,
       uptime: Date.now() - this.startTime,
-      version: SIDECAR_VERSION,
       token: this.opts.token,
     };
     sock.write(makeResponse(id, result));
@@ -483,7 +473,6 @@ export class SidecarServer {
     this.sessions.set(sessionId, session);
 
     dataServer.listen(socketPath, () => {
-      this.resetIdleTimer();
       const result: SessionCreateResult = { sessionId, socketPath };
       sock.write(makeResponse(id, result));
     });
@@ -655,25 +644,6 @@ export class SidecarServer {
     session.dataServer.close();
     cleanupEndpoint(session.socketPath);
     this.sessions.delete(sessionId);
-    this.resetIdleTimer();
-  }
-
-  private resetIdleTimer(): void {
-    if (this.idleTimer) clearTimeout(this.idleTimer);
-    if (this.opts.idleTimeoutMs <= 0) return;
-    if (
-      this.sessions.size > 0
-      || this.controlClients.size > 0
-    ) return;
-
-    this.idleTimer = setTimeout(() => {
-      if (
-        this.sessions.size === 0
-        && this.controlClients.size === 0
-      ) {
-        void this.shutdown().then(() => process.exit(0));
-      }
-    }, this.opts.idleTimeoutMs);
   }
 
   private sessionSocketPath(sessionId: string): string {

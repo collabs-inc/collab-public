@@ -33,7 +33,7 @@ describe("shouldZoom", () => {
 
 // -- Extracted constants and logic (from renderer.js lines 53-230) --
 
-const ZOOM_MIN = 0.33;
+const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1;
 const ZOOM_RUBBER_BAND_K = 400;
 

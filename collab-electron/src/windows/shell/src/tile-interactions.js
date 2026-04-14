@@ -50,6 +50,8 @@ export function attachDrag(titleBar, tile, {
     const startMY = e.clientY;
     const startTX = tile.x;
     const startTY = tile.y;
+    const startPanX = viewport.panX;
+    const startPanY = viewport.panY;
     const shiftHeld = e.shiftKey;
 
     const groupCtx = getGroupDragContext();
@@ -58,6 +60,8 @@ export function attachDrag(titleBar, tile, {
     const webviews = getAllWebviews();
     disablePointerEvents(webviews);
 
+    const container = titleBar.closest(".canvas-tile");
+    container.classList.add("tile-dragging");
     if (isGroupDrag) {
       for (const entry of groupCtx) {
         entry.container.classList.add("tile-dragging");
@@ -65,12 +69,14 @@ export function attachDrag(titleBar, tile, {
     }
 
     let moved = false;
+    let lastMX = startMX;
+    let lastMY = startMY;
 
-    function onMove(e) {
-      const dx = (e.clientX - startMX) / viewport.zoom;
-      const dy = (e.clientY - startMY) / viewport.zoom;
-      const dist = Math.hypot(e.clientX - startMX, e.clientY - startMY);
-      if (dist >= CLICK_THRESHOLD) moved = true;
+    function applyDrag(mx, my) {
+      const panDX = viewport.panX - startPanX;
+      const panDY = viewport.panY - startPanY;
+      const dx = (mx - startMX - panDX) / viewport.zoom;
+      const dy = (my - startMY - panDY) / viewport.zoom;
 
       if (isGroupDrag) {
         for (const entry of groupCtx) {
@@ -84,12 +90,26 @@ export function attachDrag(titleBar, tile, {
       onUpdate();
     }
 
+    function onMove(e) {
+      lastMX = e.clientX;
+      lastMY = e.clientY;
+      const dist = Math.hypot(lastMX - startMX, lastMY - startMY);
+      if (dist >= CLICK_THRESHOLD) moved = true;
+      applyDrag(lastMX, lastMY);
+    }
+
+    function onWheel() {
+      applyDrag(lastMX, lastMY);
+    }
+
     function onUp(e) {
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("wheel", onWheel);
       enablePointerEvents(webviews);
 
       if (shiftHeld && !moved) {
+        container.classList.remove("tile-dragging");
         if (isGroupDrag) {
           for (const entry of groupCtx) {
             entry.container.classList.remove("tile-dragging");
@@ -103,6 +123,7 @@ export function attachDrag(titleBar, tile, {
         onFocus(tile.id, e);
       }
 
+      container.classList.remove("tile-dragging");
       if (isGroupDrag) {
         for (const entry of groupCtx) {
           entry.container.classList.remove("tile-dragging");
@@ -116,6 +137,7 @@ export function attachDrag(titleBar, tile, {
 
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
+    document.addEventListener("wheel", onWheel, { passive: true });
   }
 
   titleBar.addEventListener("mousedown", (e) => startDrag(e));
@@ -267,6 +289,7 @@ export function attachMarquee(canvasEl, {
  */
 export function attachResize(
   container, tile, viewport, onUpdate, getAllWebviews, onFocus,
+  onResizeEnd,
 ) {
   const edges = ["n", "s", "e", "w"];
   const corners = ["nw", "ne", "sw", "se"];
@@ -283,6 +306,8 @@ export function attachResize(
 
       const startMX = e.clientX;
       const startMY = e.clientY;
+      const startPanX = viewport.panX;
+      const startPanY = viewport.panY;
       const startX = tile.x;
       const startY = tile.y;
       const startW = tile.width;
@@ -295,8 +320,10 @@ export function attachResize(
       }
 
       function onMove(e) {
-        const dx = (e.clientX - startMX) / viewport.zoom;
-        const dy = (e.clientY - startMY) / viewport.zoom;
+        const panDX = viewport.panX - startPanX;
+        const panDY = viewport.panY - startPanY;
+        const dx = (e.clientX - startMX - panDX) / viewport.zoom;
+        const dy = (e.clientY - startMY - panDY) / viewport.zoom;
         const symmetric = e.altKey;
         const m = symmetric ? 2 : 1;
         const cx = startX + startW / 2;
@@ -336,6 +363,7 @@ export function attachResize(
         }
         snapToGrid(tile);
         onUpdate();
+        if (onResizeEnd) onResizeEnd(tile);
         if (onFocus) onFocus();
       }
 
