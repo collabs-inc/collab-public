@@ -32,7 +32,7 @@ import {
   SIDECAR_PID_PATH,
 } from "./sidecar/protocol";
 import { COLLAB_DIR } from "./paths";
-import { resolveTerminalTarget } from "./terminal-target";
+import { resolveShellPath, resolveTerminalTarget } from "./terminal-target";
 
 interface PtySession {
   pty: pty.IPty;
@@ -486,7 +486,7 @@ export async function createSession(
   cwdGuestPath?: string;
 }> {
   const resolvedCwd = cwd || os.homedir();
-  const shell = process.env.SHELL || "/bin/zsh";
+  const shell = resolveShellPath();
   const c = cols || 80;
   const r = rows || 24;
 
@@ -520,6 +520,7 @@ export async function createSession(
       "-c", resolvedCwd,
       "-x", String(c),
       "-y", String(r),
+      shell,
     );
 
     if (zshIntegrated) {

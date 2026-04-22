@@ -156,6 +156,8 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("pref:set", key, value),
   listTerminalTargets: () =>
     ipcRenderer.invoke("terminal:list-targets"),
+  checkShellCommand: (command: string) =>
+    ipcRenderer.invoke("terminal:check-shell-command", command),
   getWorkspacePref: (key: string, workspacePath: string) =>
     ipcRenderer.invoke("workspace-pref:get", { key, workspacePath }),
   setWorkspacePref: (key: string, value: unknown, workspacePath: string) =>

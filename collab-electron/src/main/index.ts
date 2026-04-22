@@ -48,7 +48,7 @@ import {
 } from "./analytics";
 import { stopImageWorker } from "./image-service";
 import { installCli } from "./cli-installer";
-import { listTerminalTargets } from "./terminal-target";
+import { commandExists, listTerminalTargets } from "./terminal-target";
 import { readSessionMeta } from "./tmux";
 import { registerBrowserIpc } from "./ipc-browser";
 import { registerAgentIpc } from "./acp-agent";
@@ -566,6 +566,15 @@ ipcMain.handle(
 ipcMain.handle(
   "terminal:list-targets",
   () => listTerminalTargets(),
+);
+
+ipcMain.handle(
+  "terminal:check-shell-command",
+  (_event, command: string) => {
+    const trimmed = typeof command === "string" ? command.trim() : "";
+    if (trimmed === "") return true;
+    return commandExists(trimmed);
+  },
 );
 
 ipcMain.handle(

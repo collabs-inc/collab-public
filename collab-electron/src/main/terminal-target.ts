@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import * as os from "node:os";
 import { displayBasename, hostPathToGuestPath, parseWslUncPath } from "@collab/shared/path-utils";
-import { type TerminalTarget } from "./config";
+import { getTerminalCommand, type TerminalTarget } from "./config";
 
 export interface TerminalTargetOption {
   id: TerminalTarget;
@@ -33,7 +33,7 @@ interface WslDistro {
   isDefault: boolean;
 }
 
-function commandExists(command: string): boolean {
+export function commandExists(command: string): boolean {
   try {
     execFileSync(
       process.platform === "win32" ? "where.exe" : "which",
@@ -121,7 +121,9 @@ function resolveWindowsAutoTarget(
   return defaultDistro ? `wsl:${defaultDistro}` : "powershell";
 }
 
-function resolveShellPath(): string {
+export function resolveShellPath(): string {
+  const override = getTerminalCommand();
+  if (override && commandExists(override)) return override;
   if (process.platform === "darwin") {
     return process.env.SHELL || "/bin/zsh";
   }
