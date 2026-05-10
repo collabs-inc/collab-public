@@ -46,6 +46,11 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 			cursorWidth: 2,
 			scrollback: 200000,
 			allowProposedApi: true,
+			linkHandler: {
+				activate(_event, text) {
+					window.api.openExternal(text);
+				},
+			},
 		});
 
 		const fit = new FitAddon();

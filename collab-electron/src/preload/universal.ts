@@ -549,6 +549,10 @@ contextBridge.exposeInMainWorld("api", {
   forwardPinch: (deltaY: number) =>
     ipcRenderer.send("canvas:forward-pinch", deltaY),
 
+  // Open URL in external browser
+  openExternal: (url: string) =>
+    ipcRenderer.send("shell:open-external", url),
+
   // Generic sendToHost for webview → shell renderer communication
   sendToHost: (channel: string, ...args: unknown[]) =>
     ipcRenderer.sendToHost(channel, ...args),

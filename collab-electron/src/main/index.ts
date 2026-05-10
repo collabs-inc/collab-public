@@ -668,6 +668,10 @@ ipcMain.on(
 ipcMain.on("settings:close", () => setSettingsOpen(false));
 ipcMain.on("settings:toggle", () => setSettingsOpen(!settingsOpen));
 
+ipcMain.on("shell:open-external", (_event, url: string) => {
+  shell.openExternal(url);
+});
+
 function sendLoadingDone(): void {
   mainWindow?.webContents.send("shell:loading-done");
 }
