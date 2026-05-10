@@ -619,9 +619,14 @@ export function createTileManager({
 			const wv = document.createElement("webview");
 			const viewerConfig = configs.viewer;
 			const mode = type === "note" ? "note" : "code";
+			const viewerParams = new URLSearchParams();
+			if (typeof filePath === "string" && filePath.length > 0) {
+				viewerParams.set("tilePath", filePath);
+			}
+			viewerParams.set("tileMode", mode);
 			wv.setAttribute(
 				"src",
-				`${viewerConfig.src}?tilePath=${encodeURIComponent(filePath)}&tileMode=${mode}`,
+				`${viewerConfig.src}?${viewerParams.toString()}`,
 			);
 			wv.setAttribute("preload", viewerConfig.preload);
 			wv.setAttribute(
@@ -812,9 +817,14 @@ export function createTileManager({
 				const wv = document.createElement("webview");
 				const viewerConfig = configs.viewer;
 				const mode = tile.type === "note" ? "note" : "code";
+				const viewerParams = new URLSearchParams();
+				if (typeof tile.filePath === "string" && tile.filePath.length > 0) {
+					viewerParams.set("tilePath", tile.filePath);
+				}
+				viewerParams.set("tileMode", mode);
 				wv.setAttribute(
 					"src",
-					`${viewerConfig.src}?tilePath=${encodeURIComponent(tile.filePath)}&tileMode=${mode}`,
+					`${viewerConfig.src}?${viewerParams.toString()}`,
 				);
 				wv.setAttribute("preload", viewerConfig.preload);
 				wv.setAttribute("webpreferences", "contextIsolation=yes, sandbox=yes");
