@@ -35,6 +35,7 @@ electron/out/
 .collaborator/
 .superpowers/
 .crush/
+.serena/
 
 # Private — not published to the public repo
 # Back up these files separately when migrating machines
