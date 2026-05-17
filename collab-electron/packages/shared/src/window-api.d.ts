@@ -119,6 +119,8 @@ export interface CollabApi {
   getDeviceId: () => Promise<string>;
   getPref: (key: string) => Promise<unknown>;
   setPref: (key: string, value: unknown) => Promise<void>;
+  setKeyboardShortcutRecording: (recording: boolean) => void;
+  onPrefChanged: (cb: (key: string, value: unknown) => void) => Unsubscribe;
   listTerminalTargets: () => Promise<TerminalTargetOption[]>;
   getWorkspacePref: (key: string, workspacePath: string) => Promise<unknown>;
   setWorkspacePref: (

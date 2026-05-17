@@ -9,12 +9,32 @@ import {
   Monitor,
   Terminal,
 } from "@phosphor-icons/react";
+import {
+  KEYBOARD_SHORTCUTS_PREF,
+  KEYBOARD_SHORTCUT_DEFINITIONS,
+  findKeyboardShortcutConflicts,
+  formatKeyboardShortcutBinding,
+  getDefaultKeyboardShortcutBindings,
+  getEffectiveKeyboardShortcutBindings,
+  keyboardShortcutBindingFromInput,
+  keyboardShortcutBindingsEqual,
+  normalizeKeyboardShortcutOverrides,
+  validateKeyboardShortcutBinding,
+  withKeyboardShortcutOverride,
+  type KeyboardShortcutActionId,
+  type KeyboardShortcutBinding,
+  type KeyboardShortcutCategory,
+  type KeyboardShortcutDefinition,
+  type KeyboardShortcutOverride,
+  type KeyboardShortcutOverrides,
+} from "@collab/shared/keyboard-shortcuts";
 
 type ThemeMode = "light" | "dark" | "system";
 
 interface SettingsApi {
   getPref: (key: string) => Promise<unknown>;
   setPref: (key: string, value: unknown) => Promise<void>;
+  setKeyboardShortcutRecording: (recording: boolean) => void;
   listTerminalTargets: () => Promise<Array<{
     id: string;
     label: string;
@@ -236,31 +256,12 @@ function AppearancePane() {
   );
 }
 
-const IS_MAC = window.api.getPlatform() === "darwin";
+const PLATFORM = window.api.getPlatform();
+const IS_MAC = PLATFORM === "darwin";
 
 const MOD = IS_MAC ? "\u2318" : "Ctrl+";
 const SHIFT = IS_MAC ? "\u21E7" : "Shift+";
 const CTRL = IS_MAC ? "\u2303" : "Ctrl+";
-const ALT = IS_MAC ? "\u2325" : "Alt+";
-
-const SHORTCUTS: { label: string; keys: string }[] = [
-  { label: "Settings", keys: `${MOD} ,` },
-  { label: "Find", keys: `${MOD} K` },
-  { label: "Toggle Navigator", keys: `${MOD} \\` },
-  { label: "Toggle Terminal List", keys: `${MOD} \`` },
-  { label: "Open Workspace", keys: `${SHIFT} ${MOD} O` },
-  { label: "Zoom In", keys: `${MOD} =` },
-  { label: "Zoom Out", keys: `${MOD} -` },
-  { label: "Actual Size", keys: `${MOD} 0` },
-  {
-    label: "Toggle Full Screen",
-    keys: IS_MAC ? "\u2303 \u2318 F" : "F11",
-  },
-  { label: "Focus Tile Left", keys: `${ALT} ←` },
-  { label: "Focus Tile Right", keys: `${ALT} →` },
-  { label: "Focus Tile Up", keys: `${ALT} ↑` },
-  { label: "Focus Tile Down", keys: `${ALT} ↓` },
-];
 
 const MOUSE_INPUTS: { label: string; keys: string }[] = [
   { label: "Pan Canvas", keys: "Two-Finger Swipe" },
@@ -277,7 +278,7 @@ const MOUSE_INPUTS: { label: string; keys: string }[] = [
 function Kbd({ children }: { children: string }) {
   return (
     <kbd
-      className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-mono"
+      className="inline-flex min-h-6 items-center rounded px-1.5 py-0.5 text-xs font-mono"
       style={{
         backgroundColor:
           "color-mix(in srgb, var(--foreground) 8%, transparent)",
@@ -286,6 +287,21 @@ function Kbd({ children }: { children: string }) {
     >
       {children}
     </kbd>
+  );
+}
+
+function KbdGroup({ keys }: { keys: string[] }) {
+  if (keys.length === 0) {
+    return (
+      <span className="text-xs font-medium text-muted-foreground">
+        Disabled
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-wrap justify-end gap-1.5">
+      {keys.map((key) => <Kbd key={key}>{key}</Kbd>)}
+    </span>
   );
 }
 
@@ -305,6 +321,285 @@ function ShortcutList({ items }: { items: { label: string; keys: string }[] }) {
           <Kbd>{keys}</Kbd>
         </div>
       ))}
+    </div>
+  );
+}
+
+const KEYBOARD_SHORTCUT_CATEGORIES: KeyboardShortcutCategory[] = [
+  "Application",
+  "Navigation",
+  "Canvas",
+  "View",
+];
+
+function shortcutOverrideIsDefault(
+  actionId: KeyboardShortcutActionId,
+  overrides: KeyboardShortcutOverrides,
+): boolean {
+  return !Object.hasOwn(overrides, actionId);
+}
+
+function shortcutOverrideFromBinding(
+  binding: KeyboardShortcutBinding,
+): KeyboardShortcutBinding[] {
+  return [binding];
+}
+
+function shortcutBindingsMatchDefault(
+  actionId: KeyboardShortcutActionId,
+  bindings: KeyboardShortcutBinding[],
+): boolean {
+  const defaults = getDefaultKeyboardShortcutBindings(actionId, PLATFORM);
+  return bindings.length === defaults.length && bindings.every(
+    (binding, index) => keyboardShortcutBindingsEqual(
+      binding,
+      defaults[index]!,
+      PLATFORM,
+    ),
+  );
+}
+
+function ShortcutRow({
+  definition,
+  overrides,
+  recording,
+  draftBinding,
+  error,
+  onRecord,
+  onClear,
+  onReset,
+}: {
+  definition: KeyboardShortcutDefinition;
+  overrides: KeyboardShortcutOverrides;
+  recording: boolean;
+  draftBinding: KeyboardShortcutBinding | null;
+  error: string | null;
+  onRecord: (actionId: KeyboardShortcutActionId) => void;
+  onClear: (actionId: KeyboardShortcutActionId) => void;
+  onReset: (actionId: KeyboardShortcutActionId) => void;
+}) {
+  const effectiveBindings = getEffectiveKeyboardShortcutBindings(
+    definition.id,
+    overrides,
+    PLATFORM,
+  );
+  const displayBindings = recording && draftBinding
+    ? [draftBinding]
+    : effectiveBindings;
+  const labels = displayBindings.map((binding) =>
+    formatKeyboardShortcutBinding(binding, PLATFORM)
+  );
+  const isDefault = shortcutOverrideIsDefault(definition.id, overrides);
+  const isDisabled = !isDefault && overrides[definition.id] === null;
+
+  return (
+    <div
+      className="py-2.5"
+      style={{
+        borderBottom:
+          "1px solid color-mix(in srgb, var(--foreground) 6%, transparent)",
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <span className="min-w-0 flex-1 text-sm">{definition.label}</span>
+        <button
+          type="button"
+          data-shortcut-action={definition.id}
+          data-recording-shortcut={recording ? "true" : undefined}
+          onClick={() => onRecord(definition.id)}
+          className="flex min-h-8 min-w-40 items-center justify-end rounded-md px-2 text-right outline-none"
+          style={{
+            border: `1px solid ${recording
+              ? "var(--foreground)"
+              : "color-mix(in srgb, var(--foreground) 12%, transparent)"}`,
+            backgroundColor: recording
+              ? "color-mix(in srgb, var(--foreground) 6%, transparent)"
+              : "transparent",
+          }}
+        >
+          <KbdGroup keys={labels} />
+        </button>
+        <button
+          type="button"
+          onClick={() => onClear(definition.id)}
+          disabled={isDisabled}
+          className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-40"
+        >
+          Clear
+        </button>
+        <button
+          type="button"
+          onClick={() => onReset(definition.id)}
+          disabled={isDefault}
+          className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-40"
+        >
+          Reset
+        </button>
+      </div>
+      {recording && error && (
+        <p className="mt-1 text-xs" style={{ color: "#ef4444" }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function KeyboardShortcutEditor() {
+  const [overrides, setOverrides] = useState<KeyboardShortcutOverrides>({});
+  const [recordingAction, setRecordingAction] =
+    useState<KeyboardShortcutActionId | null>(null);
+  const [draftBinding, setDraftBinding] =
+    useState<KeyboardShortcutBinding | null>(null);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getPref(KEYBOARD_SHORTCUTS_PREF)
+      .then((value) => {
+        setOverrides(normalizeKeyboardShortcutOverrides(value));
+      })
+      .catch(() => { });
+  }, []);
+
+  useEffect(() => {
+    if (!recordingAction) return;
+    const target = document.querySelector<HTMLElement>(
+      `[data-shortcut-action="${recordingAction}"]`,
+    );
+    target?.focus();
+  }, [recordingAction]);
+
+  const saveOverrides = useCallback(async (next: KeyboardShortcutOverrides) => {
+    setOverrides(next);
+    await api.setPref(KEYBOARD_SHORTCUTS_PREF, next);
+  }, []);
+
+  const saveOverride = useCallback(async (
+    actionId: KeyboardShortcutActionId,
+    override: KeyboardShortcutOverride | undefined,
+  ) => {
+    await saveOverrides(withKeyboardShortcutOverride(
+      overrides,
+      actionId,
+      override,
+    ));
+  }, [overrides, saveOverrides]);
+
+  const startRecording = useCallback((actionId: KeyboardShortcutActionId) => {
+    setRecordingAction(actionId);
+    setDraftBinding(null);
+    setRecordingError(null);
+  }, []);
+
+  const cancelRecording = useCallback(() => {
+    setRecordingAction(null);
+    setDraftBinding(null);
+    setRecordingError(null);
+  }, []);
+
+  useEffect(() => {
+    api.setKeyboardShortcutRecording(recordingAction !== null);
+    return () => api.setKeyboardShortcutRecording(false);
+  }, [recordingAction]);
+
+  const clearShortcut = useCallback((actionId: KeyboardShortcutActionId) => {
+    void saveOverride(actionId, null);
+    if (recordingAction === actionId) cancelRecording();
+  }, [cancelRecording, recordingAction, saveOverride]);
+
+  const resetShortcut = useCallback((actionId: KeyboardShortcutActionId) => {
+    void saveOverride(actionId, undefined);
+    if (recordingAction === actionId) cancelRecording();
+  }, [cancelRecording, recordingAction, saveOverride]);
+
+  useEffect(() => {
+    if (!recordingAction) return;
+    const handler = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (event.key === "Escape") {
+        cancelRecording();
+        return;
+      }
+      if (event.key === "Backspace" || event.key === "Delete") {
+        clearShortcut(recordingAction);
+        return;
+      }
+
+      const binding = keyboardShortcutBindingFromInput(event);
+      if (!binding) return;
+      setDraftBinding(binding);
+
+      const validationError = validateKeyboardShortcutBinding(binding);
+      if (validationError) {
+        setRecordingError(validationError);
+        return;
+      }
+
+      const conflicts = findKeyboardShortcutConflicts(
+        binding,
+        recordingAction,
+        overrides,
+        PLATFORM,
+      );
+      if (conflicts.length > 0) {
+        setRecordingError(`Already used by ${conflicts[0]!.label}.`);
+        return;
+      }
+
+      const nextOverride = shortcutOverrideFromBinding(binding);
+      const next = shortcutBindingsMatchDefault(recordingAction, nextOverride)
+        ? withKeyboardShortcutOverride(overrides, recordingAction, undefined)
+        : withKeyboardShortcutOverride(overrides, recordingAction, nextOverride);
+      void saveOverrides(next);
+      cancelRecording();
+    };
+    window.addEventListener("keydown", handler, { capture: true });
+    return () => window.removeEventListener("keydown", handler, {
+      capture: true,
+    });
+  }, [
+    cancelRecording,
+    clearShortcut,
+    overrides,
+    recordingAction,
+    saveOverrides,
+  ]);
+
+  return (
+    <div className="space-y-5">
+      {KEYBOARD_SHORTCUT_CATEGORIES.map((category) => {
+        const definitions = KEYBOARD_SHORTCUT_DEFINITIONS.filter(
+          (definition) => definition.category === category,
+        );
+        return (
+          <div key={category} className="space-y-1">
+            <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+              {category}
+            </h3>
+            <div className="space-y-0">
+              {definitions.map((definition) => (
+                <ShortcutRow
+                  key={definition.id}
+                  definition={definition}
+                  overrides={overrides}
+                  recording={recordingAction === definition.id}
+                  draftBinding={recordingAction === definition.id
+                    ? draftBinding
+                    : null}
+                  error={recordingAction === definition.id
+                    ? recordingError
+                    : null}
+                  onRecord={startRecording}
+                  onClear={clearShortcut}
+                  onReset={resetShortcut}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -492,7 +787,7 @@ function ControlsPane() {
       <div className="space-y-1">
         <h2 className="text-base font-semibold">Keyboard Shortcuts</h2>
       </div>
-      <ShortcutList items={SHORTCUTS} />
+      <KeyboardShortcutEditor />
 
       <div className="space-y-1 pt-2">
         <h2 className="text-base font-semibold">Mouse Controls</h2>

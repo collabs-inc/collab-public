@@ -29,6 +29,14 @@ import {
 	isSubpath,
 	parentPath,
 } from '@collab/shared/path-utils';
+import {
+	KEYBOARD_SHORTCUTS_PREF,
+	formatKeyboardShortcutBindings,
+	getEffectiveKeyboardShortcutBindings,
+	normalizeKeyboardShortcutOverrides,
+	type KeyboardShortcutActionId,
+	type KeyboardShortcutOverrides,
+} from '@collab/shared/keyboard-shortcuts';
 
 const PLATFORM = window.api.getPlatform();
 
@@ -38,6 +46,20 @@ const REVEAL_LABEL =
 		: PLATFORM === 'win32'
 			? 'Reveal in Explorer'
 			: 'Reveal in File Manager';
+
+function formatShortcut(
+	actionId: KeyboardShortcutActionId,
+	overrides: KeyboardShortcutOverrides,
+): string | undefined {
+	return formatKeyboardShortcutBindings(
+		getEffectiveKeyboardShortcutBindings(
+			actionId,
+			overrides,
+			PLATFORM,
+		),
+		PLATFORM,
+	)[0];
+}
 
 function ImportWebArticleModal({
 	folderPath,
@@ -168,6 +190,8 @@ function ImportWebArticleModal({
 }
 
 export default function App() {
+	const [keyboardShortcutOverrides, setKeyboardShortcutOverrides] =
+		useState<KeyboardShortcutOverrides>({});
 	const treeSearchRef =
 		useRef<SearchSortControlsHandle>(null);
 	const [workspacePaths, setWorkspacePaths] =
@@ -467,6 +491,22 @@ export default function App() {
 			cleanupAdd();
 			cleanupRemove();
 		};
+	}, []);
+
+	useEffect(() => {
+		window.api.getPref(KEYBOARD_SHORTCUTS_PREF)
+			.then((value) => {
+				setKeyboardShortcutOverrides(
+					normalizeKeyboardShortcutOverrides(value),
+				);
+			})
+			.catch(() => {});
+		return window.api.onPrefChanged((key, value) => {
+			if (key !== KEYBOARD_SHORTCUTS_PREF) return;
+			setKeyboardShortcutOverrides(
+				normalizeKeyboardShortcutOverrides(value),
+			);
+		});
 	}, []);
 
 	useEffect(() => {
@@ -1315,6 +1355,11 @@ export default function App() {
 			);
 	}, [focusActiveSearch, selectFile, getAllFlatItems]);
 
+	const addWorkspaceShortcut = formatShortcut(
+		'add-workspace',
+		keyboardShortcutOverrides,
+	);
+
 	return (
 		<div className="app">
 			<div className="workspace-content">
@@ -1348,7 +1393,10 @@ export default function App() {
 									cycleSortMode
 								}
 								searchPlaceholder="Search"
-								searchShortcut={PLATFORM === "darwin" ? "Cmd+K" : "Ctrl+K"}
+								searchShortcut={formatShortcut(
+									'focus-file-search',
+									keyboardShortcutOverrides,
+								)}
 								onArrowNav={
 									navigateItems
 								}
@@ -1368,11 +1416,11 @@ export default function App() {
 									}
 								>
 									+ Add workspace
-									<kbd className="ws-add-kbd">
-									{PLATFORM === "darwin"
-										? "Shift+Cmd+O"
-										: "Shift+Ctrl+O"}
-								</kbd>
+									{addWorkspaceShortcut && (
+										<kbd className="ws-add-kbd">
+											{addWorkspaceShortcut}
+										</kbd>
+									)}
 								</button>
 							</div>
 							<div className="table-wrapper">
