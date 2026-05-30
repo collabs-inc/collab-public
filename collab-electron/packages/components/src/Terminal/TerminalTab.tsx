@@ -52,6 +52,11 @@ function TerminalTab({
 			allowTransparency: prefersDark,
 			macOptionIsMeta: false,
 			overviewRuler: { width: 8 },
+			linkHandler: {
+				activate(_event, text) {
+					window.api.openExternal(text);
+				},
+			},
 		});
 
 		const fit = new FitAddon();
