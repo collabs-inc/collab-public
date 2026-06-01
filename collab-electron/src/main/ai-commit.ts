@@ -125,21 +125,17 @@ export async function generateCommitMessageViaCli(
 
   switch (agent) {
     case "claude":
-      result = await runCliAgent("claude", ["-p", fullPrompt], "");
+      result = await runCliAgent("claude", ["-p"], fullPrompt);
       break;
     case "codex":
       result = await runCliAgent(
         "codex",
-        ["--quiet", "--prompt", fullPrompt],
-        "",
+        ["--quiet"],
+        fullPrompt,
       );
       break;
     case "gemini":
-      result = await runCliAgent(
-        "gemini",
-        ["--prompt", fullPrompt],
-        "",
-      );
+      result = await runCliAgent("gemini", [], fullPrompt);
       break;
   }
 

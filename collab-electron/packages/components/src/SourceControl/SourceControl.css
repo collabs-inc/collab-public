@@ -1,9 +1,18 @@
-/* Source Control panel */
+/* Source Control panel — tokens align with @collab/theme and nav chrome */
 .scm-container {
+	--scm-added: var(--item-type-md, oklch(76.8% 0.233 130.85));
+	--scm-modified: var(--link, rgb(37, 99, 235));
+	--scm-renamed: var(--item-type-concept, oklch(54.6% 0.245 262.881));
+	--scm-untracked: var(--item-type-bookmark, oklch(70.5% 0.213 47.604));
+	--scm-warning: var(--item-type-bookmark, oklch(70.5% 0.213 47.604));
 	display: flex;
 	flex-direction: column;
 	height: 100%;
 	overflow: hidden;
+	font-family: var(--font-sans);
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--foreground);
 }
 
 /* Header with branch info */
@@ -19,7 +28,7 @@
 }
 
 .scm-branch-name {
-	font-family: 'IBM Plex Mono', monospace;
+	font-family: var(--font-mono), 'IBM Plex Mono', monospace;
 	font-weight: 600;
 	color: var(--foreground);
 	white-space: nowrap;
@@ -70,10 +79,10 @@
 	padding: 8px;
 	font-size: 12px;
 	font-family: inherit;
-	background: color-mix(in srgb, var(--foreground) 5%, transparent);
+	background: color-mix(in srgb, var(--input, var(--foreground)) 100%, transparent);
 	color: var(--foreground);
-	border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-	border-radius: 6px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm, 6px);
 	outline: none;
 }
 
@@ -152,7 +161,7 @@
 
 .scm-success {
 	font-size: 11px;
-	color: #4ade80;
+	color: var(--scm-added);
 	padding: 0 12px 4px;
 }
 
@@ -193,7 +202,7 @@
 }
 
 .scm-section-count {
-	font-family: 'IBM Plex Mono', monospace;
+	font-family: var(--font-mono), 'IBM Plex Mono', monospace;
 	font-size: 10px;
 	font-weight: 500;
 	color: var(--muted-foreground);
@@ -276,18 +285,18 @@
 	justify-content: center;
 	width: 16px;
 	height: 16px;
-	font-family: 'IBM Plex Mono', monospace;
+	font-family: var(--font-mono), 'IBM Plex Mono', monospace;
 	font-size: 10px;
 	font-weight: 700;
 	border-radius: 3px;
 	flex-shrink: 0;
 }
 
-.scm-file-badge.badge-M { color: #5c9bcf; }
-.scm-file-badge.badge-A { color: #4ade80; }
+.scm-file-badge.badge-M { color: var(--scm-modified); }
+.scm-file-badge.badge-A { color: var(--scm-added); }
 .scm-file-badge.badge-D { color: var(--destructive); }
-.scm-file-badge.badge-R { color: #a78bfa; }
-.scm-file-badge.badge-U { color: #f59e0b; }
+.scm-file-badge.badge-R { color: var(--scm-renamed); }
+.scm-file-badge.badge-U { color: var(--scm-untracked); }
 .scm-file-badge.badge-\\? { color: var(--muted-foreground); }
 
 .scm-file-actions {
@@ -335,11 +344,16 @@
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	padding: 32px 16px;
+	padding: 38px 19px;
 	text-align: center;
 	color: var(--muted-foreground);
-	font-size: 12px;
+	font-size: 0.85rem;
 	gap: 4px;
+}
+
+.scm-empty p {
+	margin: 0;
+	opacity: 0.85;
 }
 
 .scm-empty-icon {
@@ -397,7 +411,7 @@
 }
 
 .scm-sync-badge {
-	font-family: 'IBM Plex Mono', monospace;
+	font-family: var(--font-mono), 'IBM Plex Mono', monospace;
 	font-size: 10px;
 	font-weight: 700;
 	min-width: 14px;
@@ -434,7 +448,7 @@
 	background: var(--background);
 	border: 1px solid var(--border);
 	border-radius: 8px;
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+	box-shadow: 0 4px 16px color-mix(in srgb, var(--foreground) 12%, transparent);
 	z-index: 100;
 	overflow: hidden;
 	display: flex;
@@ -587,9 +601,9 @@
 
 .scm-stash-input {
 	flex: 1;
-	border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-	background: color-mix(in srgb, var(--foreground) 5%, transparent);
-	border-radius: 4px;
+	border: 1px solid var(--border);
+	background: color-mix(in srgb, var(--input, var(--foreground)) 100%, transparent);
+	border-radius: var(--radius-sm, 4px);
 	padding: 4px 8px;
 	font-size: 11px;
 	color: var(--foreground);
@@ -616,7 +630,7 @@
 	min-height: 120px;
 }
 
-.scm-diff-header {
+.scm-diff-toolbar {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -628,7 +642,7 @@
 .scm-diff-title {
 	font-size: 11px;
 	font-weight: 600;
-	font-family: 'IBM Plex Mono', monospace;
+	font-family: var(--font-mono), 'IBM Plex Mono', monospace;
 	color: var(--foreground);
 	flex: 1;
 	overflow: hidden;
@@ -636,7 +650,7 @@
 	white-space: nowrap;
 }
 
-.scm-diff-header-actions {
+.scm-diff-toolbar-actions {
 	display: flex;
 	gap: 2px;
 }
@@ -676,7 +690,7 @@
 .scm-diff-content {
 	flex: 1;
 	overflow: auto;
-	font-family: 'IBM Plex Mono', monospace;
+	font-family: var(--font-mono), 'IBM Plex Mono', monospace;
 	font-size: 11px;
 	line-height: 1.5;
 }
@@ -690,27 +704,27 @@
 	display: inline;
 }
 
-.scm-diff-add {
-	background: color-mix(in srgb, #4ade80 15%, transparent);
-	color: #4ade80;
+.scm-diff-line.scm-diff-add {
+	background: color-mix(in srgb, var(--scm-added) 15%, transparent);
+	color: var(--scm-added);
 }
 
-.scm-diff-remove {
+.scm-diff-line.scm-diff-remove {
 	background: color-mix(in srgb, var(--destructive) 15%, transparent);
 	color: var(--destructive);
 }
 
-.scm-diff-header {
+.scm-diff-line.scm-diff-header {
 	color: var(--muted-foreground);
 	font-weight: 600;
 }
 
-.scm-diff-meta {
+.scm-diff-line.scm-diff-meta {
 	color: var(--muted-foreground);
 	font-style: italic;
 }
 
-.scm-diff-context {
+.scm-diff-line.scm-diff-context {
 	color: var(--foreground);
 	opacity: 0.6;
 }
@@ -720,4 +734,532 @@
 	font-size: 12px;
 	color: var(--muted-foreground);
 	text-align: center;
+}
+
+.scm-commit-amend {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	color: var(--muted-foreground);
+	cursor: pointer;
+}
+
+.scm-commit-amend input {
+	margin: 0;
+}
+
+.scm-commit-button.secondary {
+	flex: 0 1 auto;
+	background: color-mix(in srgb, var(--foreground) 10%, transparent);
+	color: var(--foreground);
+	border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.scm-commit-hint {
+	font-size: 10px;
+	color: var(--muted-foreground);
+	opacity: 0.85;
+}
+
+.scm-init-button.secondary {
+	margin-top: 6px;
+	background: transparent;
+	border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.scm-init-button {
+	margin-top: 12px;
+	padding: 8px 14px;
+	font-size: 12px;
+	font-weight: 500;
+	cursor: pointer;
+	border: none;
+	border-radius: 6px;
+	background: var(--foreground);
+	color: var(--background);
+}
+
+.scm-init-button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.scm-section-action.discard {
+	color: var(--destructive);
+}
+
+.scm-section-action.discard:hover {
+	background: color-mix(in srgb, var(--destructive) 12%, transparent);
+}
+
+.scm-remote-picker {
+	position: relative;
+	margin-right: auto;
+}
+
+.scm-remote-trigger,
+.scm-remote-label {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	font-size: 11px;
+	color: var(--muted-foreground);
+	background: none;
+	border: none;
+	padding: 2px 6px;
+	cursor: pointer;
+	border-radius: 4px;
+}
+
+.scm-remote-trigger:hover {
+	color: var(--foreground);
+	background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.scm-remote-menu {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	z-index: 20;
+	min-width: 100px;
+	margin-top: 2px;
+	padding: 4px;
+	background: var(--background);
+	border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+	border-radius: 6px;
+	box-shadow: 0 4px 12px color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.scm-remote-option {
+	display: block;
+	width: 100%;
+	padding: 4px 8px;
+	font-size: 11px;
+	text-align: left;
+	background: none;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	color: var(--foreground);
+}
+
+.scm-remote-option:hover,
+.scm-remote-option.active {
+	background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.scm-branch-item.tag {
+	gap: 6px;
+}
+
+.scm-branch-loading {
+	padding: 6px 12px;
+	font-size: 11px;
+	color: var(--muted-foreground);
+}
+
+.scm-merge-banner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 8px 12px;
+	background: color-mix(in srgb, var(--scm-warning) 15%, transparent);
+	border-bottom: 1px solid color-mix(in srgb, var(--scm-warning) 30%, transparent);
+	font-size: 11px;
+	color: var(--foreground);
+	flex-shrink: 0;
+}
+
+.scm-merge-banner-actions {
+	display: flex;
+	gap: 4px;
+}
+
+.scm-merge-banner-btn {
+	font-size: 11px;
+	padding: 2px 8px;
+	border-radius: 4px;
+	border: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent);
+	background: var(--background);
+	cursor: pointer;
+}
+
+.scm-merge-banner-btn.danger {
+	color: var(--destructive);
+}
+
+.scm-merge-banner-btn.danger:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--destructive) 10%, transparent);
+}
+
+.scm-modal-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	background: color-mix(in srgb, var(--foreground) 35%, transparent);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.scm-modal {
+	background: var(--background);
+	border-radius: 8px;
+	min-width: 400px;
+	max-width: 90vw;
+	max-height: 80vh;
+	overflow: auto;
+	border: 1px solid var(--border);
+	box-shadow: 0 8px 32px color-mix(in srgb, var(--foreground) 18%, transparent);
+}
+
+.scm-modal-narrow {
+	min-width: 280px;
+}
+
+.scm-modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 16px;
+	border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.scm-modal-header h3 {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--foreground);
+}
+
+.scm-modal-close {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--muted-foreground);
+	border-radius: 4px;
+	padding: 2px;
+}
+
+.scm-modal-close:hover {
+	color: var(--foreground);
+	background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.scm-modal-body {
+	padding: 16px;
+}
+
+.scm-modal-body input,
+.scm-modal-body select,
+.scm-clone-form input {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 6px 8px;
+	font-size: 12px;
+	font-family: inherit;
+	color: var(--foreground);
+	background: color-mix(in srgb, var(--input, var(--foreground)) 100%, transparent);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm, 6px);
+	outline: none;
+}
+
+.scm-modal-body input:focus,
+.scm-modal-body select:focus,
+.scm-clone-form input:focus {
+	border-color: color-mix(in srgb, var(--foreground) 30%, transparent);
+}
+
+.scm-modal-link {
+	font-size: 11px;
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--link, var(--foreground));
+	text-decoration: underline;
+	padding: 0;
+}
+
+.scm-modal-link.danger {
+	color: var(--destructive);
+	text-decoration: none;
+}
+
+.scm-modal-link.danger:hover {
+	text-decoration: underline;
+}
+
+.scm-remote-add button,
+.scm-clone-parent button,
+.scm-rebase-toolbar button {
+	padding: 5px 10px;
+	font-size: 11px;
+	font-weight: 500;
+	cursor: pointer;
+	border-radius: var(--radius-sm, 6px);
+	border: 1px solid var(--border);
+	background: transparent;
+	color: var(--foreground);
+}
+
+.scm-remote-add button:hover:not(:disabled),
+.scm-clone-parent button:hover:not(:disabled),
+.scm-rebase-toolbar button:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.scm-remote-add button:last-child {
+	background: var(--primary);
+	color: var(--primary-foreground);
+	border-color: transparent;
+}
+
+.scm-rebase-toolbar button.danger {
+	color: var(--destructive);
+	border-color: color-mix(in srgb, var(--destructive) 40%, transparent);
+}
+
+.scm-remote-table {
+	width: 100%;
+	font-size: 11px;
+	border-collapse: collapse;
+}
+
+.scm-remote-url {
+	max-width: 180px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.scm-remote-add {
+	display: flex;
+	gap: 6px;
+	margin-top: 12px;
+}
+
+.scm-remote-add-url {
+	flex: 1;
+}
+
+.scm-clone-form label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 11px;
+	margin-bottom: 10px;
+}
+
+.scm-clone-parent {
+	display: flex;
+	gap: 6px;
+}
+
+.scm-clone-parent input {
+	flex: 1;
+}
+
+.scm-history-toggle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	padding: 6px 12px;
+	background: none;
+	border: none;
+	font-size: 11px;
+	cursor: pointer;
+	color: var(--muted-foreground);
+}
+
+.scm-history-list {
+	max-height: 200px;
+	overflow-y: auto;
+}
+
+.scm-history-row {
+	display: flex;
+	gap: 8px;
+	width: 100%;
+	padding: 4px 12px 4px 24px;
+	background: none;
+	border: none;
+	text-align: left;
+	font-size: 11px;
+	cursor: pointer;
+}
+
+.scm-history-row.selected {
+	background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.scm-history-hash {
+	font-family: var(--font-mono), monospace;
+	color: var(--muted-foreground);
+	flex-shrink: 0;
+}
+
+.scm-history-subject {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--foreground);
+}
+
+.scm-history-loading {
+	margin-left: auto;
+	color: var(--muted-foreground);
+}
+
+.scm-history-row:hover {
+	background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.scm-history-file-status {
+	display: inline-block;
+	min-width: 1.25em;
+	margin-right: 6px;
+	font-weight: 600;
+	color: var(--muted-foreground);
+}
+
+.scm-history-files {
+	margin: 0 0 8px 32px;
+	padding: 0;
+	font-size: 10px;
+	list-style: none;
+}
+
+.scm-rebase-panel {
+	padding: 8px 12px;
+	border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.scm-rebase-toolbar {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+
+.scm-rebase-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.scm-rebase-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 0;
+	font-size: 11px;
+}
+
+.scm-rebase-subject {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.scm-rebase-hash {
+	font-family: var(--font-mono), monospace;
+	color: var(--muted-foreground);
+	flex-shrink: 0;
+}
+
+.scm-rebase-order {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+.scm-rebase-order button {
+	padding: 0 4px;
+	font-size: 10px;
+	line-height: 1;
+	border: none;
+	background: none;
+	color: var(--muted-foreground);
+	cursor: pointer;
+}
+
+.scm-rebase-order button:hover:not(:disabled) {
+	color: var(--foreground);
+}
+
+.scm-rebase-item select {
+	font-size: 11px;
+	padding: 2px 4px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm, 4px);
+	background: var(--background);
+	color: var(--foreground);
+}
+
+.scm-branch-pick {
+	display: block;
+	width: 100%;
+	padding: 6px 10px;
+	text-align: left;
+	font-size: 12px;
+	background: none;
+	border: none;
+	border-radius: var(--radius-sm, 4px);
+	cursor: pointer;
+	color: var(--foreground);
+}
+
+.scm-branch-pick:hover {
+	background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.scm-remote-table th {
+	text-align: left;
+	font-weight: 600;
+	color: var(--muted-foreground);
+	padding: 4px 8px 8px 0;
+}
+
+.scm-remote-table td {
+	padding: 6px 8px 6px 0;
+	vertical-align: top;
+	color: var(--foreground);
+}
+
+.scm-empty-inline {
+	padding: 8px 12px;
+	font-size: 11px;
+	color: var(--muted-foreground);
+}
+
+.scm-submodule-row,
+.scm-worktree-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 12px 4px 24px;
+	font-size: 11px;
+}
+
+.scm-manage-remotes {
+	font-size: 10px;
+	margin-left: 4px;
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--muted-foreground);
+	text-decoration: underline;
+}
+
+.scm-sign-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
 }

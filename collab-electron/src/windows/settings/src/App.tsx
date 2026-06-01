@@ -8,6 +8,7 @@ import {
   Moon,
   Monitor,
   Terminal,
+  GitBranch,
   Sparkle,
   CheckCircle,
   XCircle,
@@ -29,6 +30,17 @@ interface SettingsApi {
   getAgents: () => Promise<AgentStatus[]>;
   installSkill: (agentId: string) => Promise<{ ok: boolean }>;
   uninstallSkill: (agentId: string) => Promise<{ ok: boolean }>;
+  aiHasKey: () => Promise<boolean>;
+  aiValidateKey: (key: string) => Promise<{ valid: boolean }>;
+  getConfig: () => Promise<{ workspaces: string[] }>;
+  gitConfigDisplay: (
+    workspacePath?: string,
+  ) => Promise<{
+    userName: string;
+    userEmail: string;
+    credentialHelper: string;
+    gpgSign: boolean;
+  }>;
   close: () => void;
 }
 
@@ -604,7 +616,8 @@ type Pane =
   | "terminal"
   | "integrations"
   | "controls"
-  | "ai";
+  | "ai"
+  | "git";
 
 const NAV_ITEMS: {
   id: Pane;
@@ -616,7 +629,68 @@ const NAV_ITEMS: {
     { id: "integrations", label: "Integrations", icon: PuzzlePiece },
     { id: "controls", label: "Controls", icon: Keyboard },
     { id: "ai", label: "AI", icon: Sparkle },
+    { id: "git", label: "Git", icon: GitBranch },
   ];
+
+function GitPane() {
+  const [cfg, setCfg] = useState<{
+    userName: string;
+    userEmail: string;
+    credentialHelper: string;
+    gpgSign: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    void api
+      .getConfig()
+      .then((c) => {
+        const ws = c.workspaces?.[0];
+        if (!ws) return;
+        return api.gitConfigDisplay(ws);
+      })
+      .then((display) => {
+        if (display) setCfg(display);
+      })
+      .catch(() => {});
+  }, []);
+
+  return (
+    <div className="space-y-6 p-6">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold">Git</h2>
+        <p className="text-sm text-muted-foreground">
+          Read-only view of your system git configuration. Manage credentials
+          with your OS credential manager or{" "}
+          <code className="text-xs">git config</code> in a terminal.
+        </p>
+      </div>
+      {cfg ? (
+        <dl className="space-y-3 text-sm font-mono">
+          <div>
+            <dt className="text-muted-foreground">user.name</dt>
+            <dd>{cfg.userName || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">user.email</dt>
+            <dd>{cfg.userEmail || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">credential.helper</dt>
+            <dd>{cfg.credentialHelper || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">commit.gpgsign</dt>
+            <dd>{cfg.gpgSign ? "true" : "false"}</dd>
+          </div>
+        </dl>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Open a workspace to view git configuration.
+        </p>
+      )}
+    </div>
+  );
+}
 
 function AiPane() {
   const [apiKey, setApiKey] = useState("");
@@ -627,15 +701,10 @@ function AiPane() {
   >(null);
 
   useEffect(() => {
-    api.getPref("ai.hasKey").then(() => {
-      // We can't read the key (guarded), so check via aiHasKey
-      (window as unknown as { api: { aiHasKey: () => Promise<boolean> } }).api
-        .aiHasKey()
-        .then((has: boolean) => {
-          setHasExistingKey(has);
-        })
-        .catch(() => {});
-    }).catch(() => {});
+    void api
+      .aiHasKey()
+      .then(setHasExistingKey)
+      .catch(() => {});
   }, []);
 
   async function handleSave() {
@@ -643,11 +712,7 @@ function AiPane() {
     setValidating(true);
     setValidationResult(null);
     try {
-      const { valid } = await (
-        window as unknown as {
-          api: { aiValidateKey: (k: string) => Promise<{ valid: boolean }> };
-        }
-      ).api.aiValidateKey(apiKey.trim());
+      const { valid } = await api.aiValidateKey(apiKey.trim());
       if (valid) {
         await api.setPref("ai.apiKey", apiKey.trim());
         setHasExistingKey(true);
@@ -917,6 +982,7 @@ export default function App() {
         {activePane === "integrations" && <IntegrationsPane />}
         {activePane === "controls" && <ControlsPane />}
         {activePane === "ai" && <AiPane />}
+        {activePane === "git" && <GitPane />}
       </div>
     </div>
   );

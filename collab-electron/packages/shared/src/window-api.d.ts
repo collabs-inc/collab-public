@@ -5,10 +5,21 @@ import type {
 } from "./types";
 import type { ReplayMessage } from "./replay-types";
 import type {
+  GitCloneOptions,
+  GitCloneResult,
+  GitConfigDisplay,
+  GitDiffHunk,
+  GitDiffOpenParams,
+  GitLogEntry,
+  GitLogFileChange,
+  GitRebaseTodoItem,
   GitStatusResult,
   GitBranch,
   GitRemote,
   GitStash,
+  GitSubmodule,
+  GitTag,
+  GitWorktree,
 } from "./git-types";
 
 type Unsubscribe = () => void;
@@ -346,6 +357,10 @@ export interface CollabApi {
     cb: (newPath: string) => void,
   ) => Unsubscribe;
 
+  onGitDiffOpen: (
+    cb: (params: GitDiffOpenParams) => void,
+  ) => Unsubscribe;
+
   // Auto-updater
   updateGetStatus: () => Promise<UpdateState>;
   updateCheck: () => Promise<UpdateState>;
@@ -374,62 +389,241 @@ export interface CollabApi {
   forwardPinch: (deltaY: number) => void;
 
   // Git source control
-  gitStatus: () => Promise<GitStatusResult>;
-  gitStage: (paths: string[]) => Promise<void>;
-  gitUnstage: (paths: string[]) => Promise<void>;
-  gitStageAll: () => Promise<void>;
-  gitUnstageAll: () => Promise<void>;
-  gitDiscard: (paths: string[]) => Promise<void>;
-  gitDiscardAll: () => Promise<void>;
-  gitCommit: (message: string) => Promise<{ hash: string }>;
+  gitStatus: (workspacePath: string) => Promise<GitStatusResult>;
+  gitStage: (
+    workspacePath: string,
+    paths: string[],
+  ) => Promise<void>;
+  gitUnstage: (
+    workspacePath: string,
+    paths: string[],
+  ) => Promise<void>;
+  gitStageAll: (workspacePath: string) => Promise<void>;
+  gitUnstageAll: (workspacePath: string) => Promise<void>;
+  gitDiscard: (
+    workspacePath: string,
+    paths: string[],
+  ) => Promise<void>;
+  gitDiscardAll: (workspacePath: string) => Promise<void>;
+  gitCommit: (
+    workspacePath: string,
+    message: string,
+    options?: { amend?: boolean; sign?: boolean },
+  ) => Promise<{ hash: string }>;
   gitDiff: (
+    workspacePath: string,
     filePath: string,
     cached: boolean,
   ) => Promise<string>;
-  gitGenerateCommitMessage: () => Promise<{
+  gitGenerateCommitMessage: (
+    workspacePath: string,
+  ) => Promise<{
     message: string;
     model: string;
   }>;
+  gitInit: (workspacePath: string) => Promise<void>;
   aiValidateKey: (
     key: string,
   ) => Promise<{ valid: boolean }>;
+  aiHasKey: () => Promise<boolean>;
   aiCanGenerate: () => Promise<{
     available: boolean;
     agent?: string;
   }>;
 
   // Push / Pull / Fetch
-  gitPush: () => Promise<void>;
+  gitPush: (
+    workspacePath: string,
+    remote?: string,
+  ) => Promise<void>;
   gitPushSetUpstream: (
+    workspacePath: string,
     remote: string,
     branch: string,
   ) => Promise<void>;
-  gitPull: () => Promise<void>;
-  gitFetch: () => Promise<void>;
-  gitRemotes: () => Promise<GitRemote[]>;
-  gitHasUpstream: () => Promise<boolean>;
+  gitPull: (
+    workspacePath: string,
+    remote?: string,
+  ) => Promise<void>;
+  gitFetch: (
+    workspacePath: string,
+    remote?: string,
+  ) => Promise<void>;
+  gitRemotes: (workspacePath: string) => Promise<GitRemote[]>;
+  gitHasUpstream: (workspacePath: string) => Promise<boolean>;
 
   // Branch operations
-  gitBranches: () => Promise<GitBranch[]>;
-  gitCheckout: (branch: string) => Promise<void>;
+  gitBranches: (workspacePath: string) => Promise<GitBranch[]>;
+  gitTags: (workspacePath: string) => Promise<GitTag[]>;
+  gitCheckout: (
+    workspacePath: string,
+    branch: string,
+  ) => Promise<void>;
   gitCreateBranch: (
+    workspacePath: string,
     name: string,
     startPoint?: string,
   ) => Promise<void>;
-  gitDeleteBranch: (name: string) => Promise<void>;
+  gitDeleteBranch: (
+    workspacePath: string,
+    name: string,
+  ) => Promise<void>;
 
   // Stash operations
-  gitStashSave: (message?: string) => Promise<void>;
-  gitStashList: () => Promise<GitStash[]>;
-  gitStashPop: (index: number) => Promise<void>;
-  gitStashApply: (index: number) => Promise<void>;
-  gitStashDrop: (index: number) => Promise<void>;
+  gitStashSave: (
+    workspacePath: string,
+    message?: string,
+  ) => Promise<void>;
+  gitStashList: (workspacePath: string) => Promise<GitStash[]>;
+  gitStashPop: (
+    workspacePath: string,
+    index: number,
+  ) => Promise<void>;
+  gitStashApply: (
+    workspacePath: string,
+    index: number,
+  ) => Promise<void>;
+  gitStashDrop: (
+    workspacePath: string,
+    index: number,
+  ) => Promise<void>;
 
   // Show file at ref (for diff viewer)
   gitShowFile: (
+    workspacePath: string,
     ref: string,
     filePath: string,
   ) => Promise<string>;
+  gitReadBlob: (
+    workspacePath: string,
+    ref: string,
+    filePath: string,
+  ) => Promise<string>;
+  gitDiffRefs: (
+    workspacePath: string,
+    leftRef: string,
+    rightRef: string,
+    filePath: string,
+  ) => Promise<string>;
+  openGitDiff: (params: GitDiffOpenParams) => void;
+  gitClone: (
+    url: string,
+    parentDir: string,
+    options?: GitCloneOptions,
+  ) => Promise<GitCloneResult>;
+  gitRemoteAdd: (
+    workspacePath: string,
+    name: string,
+    url: string,
+  ) => Promise<void>;
+  gitRemoteRemove: (
+    workspacePath: string,
+    name: string,
+  ) => Promise<void>;
+  gitRemoteRename: (
+    workspacePath: string,
+    oldName: string,
+    newName: string,
+  ) => Promise<void>;
+  gitRemoteSetUrl: (
+    workspacePath: string,
+    name: string,
+    url: string,
+    push?: boolean,
+  ) => Promise<void>;
+  gitCheckoutOurs: (
+    workspacePath: string,
+    paths: string[],
+  ) => Promise<void>;
+  gitCheckoutTheirs: (
+    workspacePath: string,
+    paths: string[],
+  ) => Promise<void>;
+  gitAdd: (workspacePath: string, paths: string[]) => Promise<void>;
+  gitMergeAbort: (workspacePath?: string) => Promise<void>;
+  gitMergeContinue: (workspacePath?: string) => Promise<void>;
+  gitCherryPickAbort: (workspacePath?: string) => Promise<void>;
+  gitCherryPickContinue: (workspacePath?: string) => Promise<void>;
+  gitRevertAbort: (workspacePath?: string) => Promise<void>;
+  gitRevertContinue: (workspacePath?: string) => Promise<void>;
+  gitLog: (
+    workspacePath?: string,
+    options?: { maxCount?: number; ref?: string },
+  ) => Promise<GitLogEntry[]>;
+  gitLogFiles: (
+    workspacePath: string,
+    hash: string,
+  ) => Promise<GitLogFileChange[]>;
+  gitRevertCommit: (
+    workspacePath: string,
+    hash: string,
+  ) => Promise<void>;
+  gitCherryPick: (
+    workspacePath: string,
+    hash: string,
+  ) => Promise<void>;
+  gitReset: (
+    workspacePath: string,
+    mode: "soft" | "mixed" | "hard",
+    ref: string,
+  ) => Promise<void>;
+  gitMerge: (workspacePath: string, branch: string) => Promise<void>;
+  gitRebase: (workspacePath: string, onto: string) => Promise<void>;
+  gitRebaseContinue: (workspacePath?: string) => Promise<void>;
+  gitRebaseAbort: (workspacePath?: string) => Promise<void>;
+  gitRebaseSkip: (workspacePath?: string) => Promise<void>;
+  gitRebaseTodoList: (
+    workspacePath?: string,
+  ) => Promise<GitRebaseTodoItem[]>;
+  gitRebaseTodoWrite: (
+    workspacePath: string,
+    items: GitRebaseTodoItem[],
+  ) => Promise<void>;
+  gitRebaseStartInteractive: (
+    workspacePath: string,
+    onto: string | null,
+    count: number,
+  ) => Promise<void>;
+  gitSubmoduleStatus: (
+    workspacePath?: string,
+  ) => Promise<GitSubmodule[]>;
+  gitSubmoduleUpdate: (
+    workspacePath?: string,
+    init?: boolean,
+    recursive?: boolean,
+  ) => Promise<void>;
+  gitWorktreeList: (workspacePath?: string) => Promise<GitWorktree[]>;
+  gitWorktreeAdd: (
+    workspacePath: string,
+    wtPath: string,
+    branch: string,
+  ) => Promise<void>;
+  gitWorktreeRemove: (
+    workspacePath: string,
+    wtPath: string,
+  ) => Promise<void>;
+  gitDiffHunks: (
+    workspacePath: string,
+    filePath: string,
+    cached?: boolean,
+  ) => Promise<GitDiffHunk[]>;
+  gitApplyCached: (
+    workspacePath: string,
+    patch: string,
+  ) => Promise<void>;
+  gitApplyWorking: (
+    workspacePath: string,
+    patch: string,
+    reverse?: boolean,
+  ) => Promise<void>;
+  gitCheckIgnore: (
+    workspacePath: string,
+    paths: string[],
+  ) => Promise<string[]>;
+  gitConfigDisplay: (
+    workspacePath?: string,
+  ) => Promise<GitConfigDisplay>;
+  gitGpgSignEnabled: (workspacePath?: string) => Promise<boolean>;
 }
 
 declare global {

@@ -491,6 +491,17 @@ contextBridge.exposeInMainWorld("api", {
     return () =>
       ipcRenderer.removeListener("scope-changed", handler);
   },
+  onGitDiffOpen: (
+    cb: (params: import("@collab/shared/git-types").GitDiffOpenParams) => void,
+  ) => {
+    const handler = (
+      _event: IpcRendererEvent,
+      params: import("@collab/shared/git-types").GitDiffOpenParams,
+    ) => cb(params);
+    ipcRenderer.on("git-diff-open", handler);
+    return () =>
+      ipcRenderer.removeListener("git-diff-open", handler);
+  },
 
   // Auto-updater
   updateGetStatus: () =>
@@ -692,70 +703,270 @@ contextBridge.exposeInMainWorld("api", {
   },
 
   // Git source control
-  gitStatus: () =>
-    ipcRenderer.invoke("git:status"),
-  gitStage: (paths: string[]) =>
-    ipcRenderer.invoke("git:stage", paths),
-  gitUnstage: (paths: string[]) =>
-    ipcRenderer.invoke("git:unstage", paths),
-  gitStageAll: () =>
-    ipcRenderer.invoke("git:stage-all"),
-  gitUnstageAll: () =>
-    ipcRenderer.invoke("git:unstage-all"),
-  gitDiscard: (paths: string[]) =>
-    ipcRenderer.invoke("git:discard", paths),
-  gitDiscardAll: () =>
-    ipcRenderer.invoke("git:discard-all"),
-  gitCommit: (message: string) =>
-    ipcRenderer.invoke("git:commit", message),
-  gitDiff: (filePath: string, cached: boolean) =>
-    ipcRenderer.invoke("git:diff", filePath, cached),
-  gitGenerateCommitMessage: () =>
-    ipcRenderer.invoke("git:generate-commit-message"),
+  gitStatus: (workspacePath: string) =>
+    ipcRenderer.invoke("git:status", workspacePath),
+  gitStage: (workspacePath: string, paths: string[]) =>
+    ipcRenderer.invoke("git:stage", workspacePath, paths),
+  gitUnstage: (workspacePath: string, paths: string[]) =>
+    ipcRenderer.invoke("git:unstage", workspacePath, paths),
+  gitStageAll: (workspacePath: string) =>
+    ipcRenderer.invoke("git:stage-all", workspacePath),
+  gitUnstageAll: (workspacePath: string) =>
+    ipcRenderer.invoke("git:unstage-all", workspacePath),
+  gitDiscard: (workspacePath: string, paths: string[]) =>
+    ipcRenderer.invoke("git:discard", workspacePath, paths),
+  gitDiscardAll: (workspacePath: string) =>
+    ipcRenderer.invoke("git:discard-all", workspacePath),
+  gitCommit: (
+    workspacePath: string,
+    message: string,
+    options?: { amend?: boolean },
+  ) =>
+    ipcRenderer.invoke("git:commit", workspacePath, message, options),
+  gitDiff: (workspacePath: string, filePath: string, cached: boolean) =>
+    ipcRenderer.invoke("git:diff", workspacePath, filePath, cached),
+  gitGenerateCommitMessage: (workspacePath: string) =>
+    ipcRenderer.invoke("git:generate-commit-message", workspacePath),
+  gitInit: (workspacePath: string) =>
+    ipcRenderer.invoke("git:init", workspacePath),
   aiValidateKey: (key: string) =>
     ipcRenderer.invoke("ai:validate-key", key),
+  aiHasKey: () =>
+    ipcRenderer.invoke("ai:has-key"),
   aiCanGenerate: () =>
     ipcRenderer.invoke("ai:can-generate"),
 
   // Push / Pull / Fetch
-  gitPush: () =>
-    ipcRenderer.invoke("git:push"),
-  gitPushSetUpstream: (remote: string, branch: string) =>
-    ipcRenderer.invoke("git:push-set-upstream", remote, branch),
-  gitPull: () =>
-    ipcRenderer.invoke("git:pull"),
-  gitFetch: () =>
-    ipcRenderer.invoke("git:fetch"),
-  gitRemotes: () =>
-    ipcRenderer.invoke("git:remotes"),
-  gitHasUpstream: () =>
-    ipcRenderer.invoke("git:has-upstream"),
+  gitPush: (workspacePath: string, remote?: string) =>
+    ipcRenderer.invoke("git:push", workspacePath, remote),
+  gitPushSetUpstream: (
+    workspacePath: string,
+    remote: string,
+    branch: string,
+  ) =>
+    ipcRenderer.invoke(
+      "git:push-set-upstream",
+      workspacePath,
+      remote,
+      branch,
+    ),
+  gitPull: (workspacePath: string, remote?: string) =>
+    ipcRenderer.invoke("git:pull", workspacePath, remote),
+  gitFetch: (workspacePath: string, remote?: string) =>
+    ipcRenderer.invoke("git:fetch", workspacePath, remote),
+  gitRemotes: (workspacePath: string) =>
+    ipcRenderer.invoke("git:remotes", workspacePath),
+  gitHasUpstream: (workspacePath: string) =>
+    ipcRenderer.invoke("git:has-upstream", workspacePath),
 
   // Branch operations
-  gitBranches: () =>
-    ipcRenderer.invoke("git:branches"),
-  gitCheckout: (branch: string) =>
-    ipcRenderer.invoke("git:checkout", branch),
-  gitCreateBranch: (name: string, startPoint?: string) =>
-    ipcRenderer.invoke("git:create-branch", name, startPoint),
-  gitDeleteBranch: (name: string) =>
-    ipcRenderer.invoke("git:delete-branch", name),
+  gitBranches: (workspacePath: string) =>
+    ipcRenderer.invoke("git:branches", workspacePath),
+  gitTags: (workspacePath: string) =>
+    ipcRenderer.invoke("git:tags", workspacePath),
+  gitCheckout: (workspacePath: string, branch: string) =>
+    ipcRenderer.invoke("git:checkout", workspacePath, branch),
+  gitCreateBranch: (
+    workspacePath: string,
+    name: string,
+    startPoint?: string,
+  ) =>
+    ipcRenderer.invoke(
+      "git:create-branch",
+      workspacePath,
+      name,
+      startPoint,
+    ),
+  gitDeleteBranch: (workspacePath: string, name: string) =>
+    ipcRenderer.invoke("git:delete-branch", workspacePath, name),
 
   // Stash operations
-  gitStashSave: (message?: string) =>
-    ipcRenderer.invoke("git:stash-save", message),
-  gitStashList: () =>
-    ipcRenderer.invoke("git:stash-list"),
-  gitStashPop: (index: number) =>
-    ipcRenderer.invoke("git:stash-pop", index),
-  gitStashApply: (index: number) =>
-    ipcRenderer.invoke("git:stash-apply", index),
-  gitStashDrop: (index: number) =>
-    ipcRenderer.invoke("git:stash-drop", index),
+  gitStashSave: (workspacePath: string, message?: string) =>
+    ipcRenderer.invoke("git:stash-save", workspacePath, message),
+  gitStashList: (workspacePath: string) =>
+    ipcRenderer.invoke("git:stash-list", workspacePath),
+  gitStashPop: (workspacePath: string, index: number) =>
+    ipcRenderer.invoke("git:stash-pop", workspacePath, index),
+  gitStashApply: (workspacePath: string, index: number) =>
+    ipcRenderer.invoke("git:stash-apply", workspacePath, index),
+  gitStashDrop: (workspacePath: string, index: number) =>
+    ipcRenderer.invoke("git:stash-drop", workspacePath, index),
 
   // Show file at ref (for diff viewer)
-  gitShowFile: (ref: string, filePath: string) =>
-    ipcRenderer.invoke("git:show-file", ref, filePath),
+  gitShowFile: (
+    workspacePath: string,
+    ref: string,
+    filePath: string,
+  ) =>
+    ipcRenderer.invoke("git:show-file", workspacePath, ref, filePath),
+  gitReadBlob: (
+    workspacePath: string,
+    ref: string,
+    filePath: string,
+  ) =>
+    ipcRenderer.invoke("git:read-blob", workspacePath, ref, filePath),
+  gitDiffRefs: (
+    workspacePath: string,
+    leftRef: string,
+    rightRef: string,
+    filePath: string,
+  ) =>
+    ipcRenderer.invoke(
+      "git:diff-refs",
+      workspacePath,
+      leftRef,
+      rightRef,
+      filePath,
+    ),
+  openGitDiff: (
+    params: import("@collab/shared/git-types").GitDiffOpenParams,
+  ) => ipcRenderer.send("git:open-diff", params),
+  gitClone: (
+    url: string,
+    parentDir: string,
+    options?: { branch?: string; depth?: number },
+  ) => ipcRenderer.invoke("git:clone", url, parentDir, options),
+  gitRemoteAdd: (
+    workspacePath: string,
+    name: string,
+    url: string,
+  ) =>
+    ipcRenderer.invoke("git:remote-add", workspacePath, name, url),
+  gitRemoteRemove: (workspacePath: string, name: string) =>
+    ipcRenderer.invoke("git:remote-remove", workspacePath, name),
+  gitRemoteRename: (
+    workspacePath: string,
+    oldName: string,
+    newName: string,
+  ) =>
+    ipcRenderer.invoke(
+      "git:remote-rename",
+      workspacePath,
+      oldName,
+      newName,
+    ),
+  gitRemoteSetUrl: (
+    workspacePath: string,
+    name: string,
+    url: string,
+    push?: boolean,
+  ) =>
+    ipcRenderer.invoke(
+      "git:remote-set-url",
+      workspacePath,
+      name,
+      url,
+      push,
+    ),
+  gitCheckoutOurs: (workspacePath: string, paths: string[]) =>
+    ipcRenderer.invoke("git:checkout-ours", workspacePath, paths),
+  gitCheckoutTheirs: (workspacePath: string, paths: string[]) =>
+    ipcRenderer.invoke("git:checkout-theirs", workspacePath, paths),
+  gitAdd: (workspacePath: string, paths: string[]) =>
+    ipcRenderer.invoke("git:add", workspacePath, paths),
+  gitMergeAbort: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:merge-abort", workspacePath),
+  gitMergeContinue: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:merge-continue", workspacePath),
+  gitCherryPickAbort: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:cherry-pick-abort", workspacePath),
+  gitCherryPickContinue: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:cherry-pick-continue", workspacePath),
+  gitRevertAbort: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:revert-abort", workspacePath),
+  gitRevertContinue: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:revert-continue", workspacePath),
+  gitLog: (
+    workspacePath?: string,
+    options?: { maxCount?: number; ref?: string },
+  ) => ipcRenderer.invoke("git:log", workspacePath, options),
+  gitLogFiles: (workspacePath: string, hash: string) =>
+    ipcRenderer.invoke("git:log-files", workspacePath, hash),
+  gitRevertCommit: (workspacePath: string, hash: string) =>
+    ipcRenderer.invoke("git:revert", workspacePath, hash),
+  gitCherryPick: (workspacePath: string, hash: string) =>
+    ipcRenderer.invoke("git:cherry-pick", workspacePath, hash),
+  gitReset: (
+    workspacePath: string,
+    mode: "soft" | "mixed" | "hard",
+    ref: string,
+  ) => ipcRenderer.invoke("git:reset", workspacePath, mode, ref),
+  gitMerge: (workspacePath: string, branch: string) =>
+    ipcRenderer.invoke("git:merge", workspacePath, branch),
+  gitRebase: (workspacePath: string, onto: string) =>
+    ipcRenderer.invoke("git:rebase", workspacePath, onto),
+  gitRebaseContinue: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:rebase-continue", workspacePath),
+  gitRebaseAbort: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:rebase-abort", workspacePath),
+  gitRebaseSkip: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:rebase-skip", workspacePath),
+  gitRebaseTodoList: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:rebase-todo-list", workspacePath),
+  gitRebaseTodoWrite: (
+    workspacePath: string,
+    items: import("@collab/shared/git-types").GitRebaseTodoItem[],
+  ) =>
+    ipcRenderer.invoke("git:rebase-todo-write", workspacePath, items),
+  gitRebaseStartInteractive: (
+    workspacePath: string,
+    onto: string | null,
+    count: number,
+  ) =>
+    ipcRenderer.invoke(
+      "git:rebase-start-interactive",
+      workspacePath,
+      onto,
+      count,
+    ),
+  gitSubmoduleStatus: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:submodule-status", workspacePath),
+  gitSubmoduleUpdate: (
+    workspacePath?: string,
+    init?: boolean,
+    recursive?: boolean,
+  ) =>
+    ipcRenderer.invoke(
+      "git:submodule-update",
+      workspacePath,
+      init,
+      recursive,
+    ),
+  gitWorktreeList: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:worktree-list", workspacePath),
+  gitWorktreeAdd: (
+    workspacePath: string,
+    wtPath: string,
+    branch: string,
+  ) =>
+    ipcRenderer.invoke("git:worktree-add", workspacePath, wtPath, branch),
+  gitWorktreeRemove: (workspacePath: string, wtPath: string) =>
+    ipcRenderer.invoke("git:worktree-remove", workspacePath, wtPath),
+  gitDiffHunks: (
+    workspacePath: string,
+    filePath: string,
+    cached?: boolean,
+  ) =>
+    ipcRenderer.invoke("git:diff-hunks", workspacePath, filePath, cached),
+  gitApplyCached: (workspacePath: string, patch: string) =>
+    ipcRenderer.invoke("git:apply-cached", workspacePath, patch),
+  gitApplyWorking: (
+    workspacePath: string,
+    patch: string,
+    reverse?: boolean,
+  ) =>
+    ipcRenderer.invoke(
+      "git:apply-working",
+      workspacePath,
+      patch,
+      reverse,
+    ),
+  gitCheckIgnore: (workspacePath: string, paths: string[]) =>
+    ipcRenderer.invoke("git:check-ignore", workspacePath, paths),
+  gitConfigDisplay: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:config-display", workspacePath),
+  gitGpgSignEnabled: (workspacePath?: string) =>
+    ipcRenderer.invoke("git:gpg-sign-enabled", workspacePath),
 });
 
 // Forward ctrl+wheel (trackpad pinch) from tile webviews to the canvas

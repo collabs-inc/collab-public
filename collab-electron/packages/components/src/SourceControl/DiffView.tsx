@@ -6,6 +6,7 @@ import React, {
 import { X, ArrowsOutSimple } from '@phosphor-icons/react';
 
 interface DiffViewProps {
+	workspacePath: string;
 	filePath: string;
 	relativePath: string;
 	cached: boolean;
@@ -44,6 +45,7 @@ function parseDiff(raw: string): DiffLine[] {
 }
 
 export function DiffView({
+	workspacePath,
 	filePath,
 	relativePath,
 	cached,
@@ -56,7 +58,7 @@ export function DiffView({
 	useEffect(() => {
 		setLoading(true);
 		window.api
-			.gitDiff(relativePath, cached)
+			.gitDiff(workspacePath, relativePath, cached)
 			.then((result) => {
 				setDiff(result);
 				setLoading(false);
@@ -65,12 +67,12 @@ export function DiffView({
 				setDiff('');
 				setLoading(false);
 			});
-	}, [relativePath, cached]);
+	}, [workspacePath, relativePath, cached]);
 
 	if (loading) {
 		return (
 			<div className="scm-diff-container">
-				<div className="scm-diff-header">
+				<div className="scm-diff-toolbar">
 					<span className="scm-diff-title">
 						Loading...
 					</span>
@@ -82,7 +84,7 @@ export function DiffView({
 	if (!diff) {
 		return (
 			<div className="scm-diff-container">
-				<div className="scm-diff-header">
+				<div className="scm-diff-toolbar">
 					<span className="scm-diff-title">
 						{relativePath}
 					</span>
@@ -105,11 +107,11 @@ export function DiffView({
 
 	return (
 		<div className="scm-diff-container">
-			<div className="scm-diff-header">
+			<div className="scm-diff-toolbar">
 				<span className="scm-diff-title">
 					{relativePath}
 				</span>
-				<div className="scm-diff-header-actions">
+				<div className="scm-diff-toolbar-actions">
 					<button
 						type="button"
 						className="scm-diff-action"

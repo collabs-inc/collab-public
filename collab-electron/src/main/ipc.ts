@@ -133,5 +133,12 @@ export function registerIpcHandlers(config: AppConfig): void {
   registerKnowledgeHandlers(knowledgeCtx);
   registerCanvasHandlers(canvasCtx);
   registerMiscHandlers(miscCtx);
-  registerGitHandlers({ config: () => appConfig });
+  registerGitHandlers({
+    config: () => appConfig,
+    forwardToWebview,
+    setFileFilter: (f) => {
+      fileFilterRef.current = f as FileFilter;
+    },
+    trackEvent,
+  });
 }

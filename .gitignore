@@ -2,7 +2,7 @@
 *.swp
 *.swo
 *~
-docs/
+/docs/
 .collaborator
 .superpowers
 .claude/
@@ -10,3 +10,10 @@ notes/
 Screenshots/
 .worktrees
 opencode.json
+
+# Generated SCM QA repos (scripts in fixtures/git/ are tracked)
+fixtures/git/merge-conflict/
+fixtures/git/submodule/
+fixtures/git/rebase-todo/
+fixtures/git/dirty-worktree/
+fixtures/git/_bare-dirty.git/

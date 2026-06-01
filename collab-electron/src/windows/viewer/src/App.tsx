@@ -15,6 +15,9 @@ import "@collab/components/Editor/Blocknote.css";
 import "@collab/components/Editor/WikiLink.css";
 import { CodeEditorView } from "@collab/components/CodeEditorView";
 import "@collab/components/CodeEditorView/CodeEditorView.css";
+import { DiffEditorView } from "@collab/components/DiffEditorView";
+import "@collab/components/DiffEditorView/DiffEditorView.css";
+import type { GitDiffOpenParams } from "@collab/shared/git-types";
 import { isImageFile } from "@collab/shared/image";
 import { isPdfFile } from "@collab/shared/pdf";
 import { toCollabFileUrl } from "@collab/shared/collab-file-url";
@@ -84,6 +87,11 @@ function blurGuestActiveElement() {
 
 export default function App() {
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
+	const [diffSession, setDiffSession] =
+		useState<GitDiffOpenParams | null>(null);
+	const [diffOriginal, setDiffOriginal] = useState("");
+	const [diffModified, setDiffModified] = useState("");
+	const [diffLoading, setDiffLoading] = useState(false);
 	const [focusedFolder, setFocusedFolder] = useState<string | null>(null);
 	const [workspacePath, setWorkspacePath] = useState<string | null>(null);
 	const [fileContent, setFileContent] = useState("");
@@ -153,8 +161,50 @@ export default function App() {
 		return window.api.onFileSelected((path) => {
 			setSelectedPath(path);
 			setFocusedFolder(null);
+			setDiffSession(null);
 		});
 	}, []);
+
+	useEffect(() => {
+		if (isTileMode) return;
+		return window.api.onGitDiffOpen((params) => {
+			setDiffSession(params);
+			setSelectedPath(null);
+			setFocusedFolder(null);
+		});
+	}, [isTileMode]);
+
+	useEffect(() => {
+		if (!diffSession) {
+			setDiffOriginal("");
+			setDiffModified("");
+			return;
+		}
+		const { workspacePath, relativePath, left, right } = diffSession;
+		setDiffLoading(true);
+		Promise.all([
+			window.api.gitReadBlob(
+				workspacePath,
+				left.ref,
+				relativePath,
+			),
+			window.api.gitReadBlob(
+				workspacePath,
+				right.ref,
+				relativePath,
+			),
+		])
+			.then(([orig, mod]) => {
+				setDiffOriginal(orig);
+				setDiffModified(mod);
+			})
+			.catch((err) => {
+				console.error("Failed to load diff:", err);
+				setDiffOriginal("");
+				setDiffModified("");
+			})
+			.finally(() => setDiffLoading(false));
+	}, [diffSession]);
 
 	// Listen for folder selection from nav view
 	useEffect(() => {
@@ -454,6 +504,11 @@ export default function App() {
 	const handleClose = useCallback(() => {
 		window.api.selectFile(null);
 		setSelectedPath(null);
+		setDiffSession(null);
+	}, []);
+
+	const handleCloseDiff = useCallback(() => {
+		setDiffSession(null);
 	}, []);
 
 	const handleCloseFolder = useCallback(() => {
@@ -465,7 +520,7 @@ export default function App() {
 		function onKeyDown(e: KeyboardEvent) {
 			if (e.key !== "Escape") return;
 			if (isTileMode) return;
-			if (!focusedFolder && !selectedPath) return;
+			if (!focusedFolder && !selectedPath && !diffSession) return;
 
 			const active = document.activeElement as HTMLElement | null;
 			const isEditable =
@@ -483,7 +538,9 @@ export default function App() {
 			}
 
 			e.preventDefault();
-			if (focusedFolder && !selectedPath) {
+			if (diffSession) {
+				handleCloseDiff();
+			} else if (focusedFolder && !selectedPath) {
 				handleCloseFolder();
 			} else {
 				handleClose();
@@ -492,7 +549,15 @@ export default function App() {
 
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [selectedPath, focusedFolder, isTileMode, handleClose, handleCloseFolder]);
+	}, [
+		selectedPath,
+		focusedFolder,
+		diffSession,
+		isTileMode,
+		handleClose,
+		handleCloseFolder,
+		handleCloseDiff,
+	]);
 
 	const displayedPath = loadedPath;
 	const editingDisabled = !!selectedPath && selectedPath !== loadedPath && !isRenamingRef.current;
@@ -530,14 +595,26 @@ export default function App() {
 		!displayedIsPdf;
 	const hasFile =
 		hasMarkdownFile || hasCodeFile || hasImageFile || hasPdfFile || showFileLoading;
-	const hasFolder = !!focusedFolder && !selectedPath;
+	const hasFolder = !!focusedFolder && !selectedPath && !diffSession;
+	const hasDiff = !!diffSession;
 	const headerPath = showFileLoading
 		? selectedPath
 		: displayedPath;
 
+	const diffHeader =
+		diffSession &&
+		`${diffSession.relativePath} (${diffSession.left.label} ↔ ${diffSession.right.label})`;
+
 	return (
 		<div className={`app${navVisible ? " nav-visible" : ""}`}>
-			{hasFile && headerPath && !isTileMode && (() => {
+			{hasDiff && diffHeader && !isTileMode && (
+				<div className="item-filepath">
+					<span className="filepath-text" title={diffHeader}>
+						{diffHeader}
+					</span>
+				</div>
+			)}
+			{hasFile && headerPath && !isTileMode && !hasDiff && (() => {
 				const { parent, name } = splitFilepath(headerPath);
 				return (
 					<div className="item-filepath">
@@ -564,6 +641,25 @@ export default function App() {
 						{fileError}
 					</div>
 				)}
+				{hasDiff && !isTileMode && (
+					<CloseOverlay onClick={handleCloseDiff} theme={theme} />
+				)}
+				{hasDiff && diffSession && (
+					diffLoading ? (
+						<div className="loading-state">
+							<div className="loading-spinner" />
+							<div className="loading-text">Loading diff…</div>
+						</div>
+					) : (
+						<DiffEditorView
+							filePath={diffSession.relativePath}
+							original={diffOriginal}
+							modified={diffModified}
+							theme={theme}
+							readOnly
+						/>
+					)
+				)}
 				{hasFolder && (
 					<>
 						{!isTileMode && <CloseOverlay onClick={handleCloseFolder} theme={theme} />}
@@ -573,7 +669,7 @@ export default function App() {
 						/>
 					</>
 				)}
-				{hasFile && !isTileMode && (
+				{hasFile && !isTileMode && !hasDiff && (
 					<CloseOverlay onClick={handleClose} theme={theme} />
 				)}
 				{showFileLoading && (

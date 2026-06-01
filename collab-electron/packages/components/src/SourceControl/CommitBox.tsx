@@ -3,6 +3,8 @@ import {
 	Check,
 	Sparkle,
 	CircleNotch,
+	ArrowUp,
+	ArrowsClockwise,
 } from '@phosphor-icons/react';
 
 interface CommitBoxProps {
@@ -12,7 +14,16 @@ interface CommitBoxProps {
 	canGenerate: boolean;
 	agentName?: string;
 	hasAnyChanges: boolean;
+	hasCommits: boolean;
+	hasMergeConflicts: boolean;
+	amend: boolean;
+	onAmendChange: (amend: boolean) => void;
+	signCommit: boolean;
+	onSignCommitChange: (sign: boolean) => void;
+	showSignOption?: boolean;
 	onCommit: () => void;
+	onCommitAndPush: () => void;
+	onCommitAndSync: () => void;
 	onGenerateMessage: () => void;
 	committing: boolean;
 	generating: boolean;
@@ -21,17 +32,29 @@ interface CommitBoxProps {
 export function CommitBox({
 	message,
 	onMessageChange,
-	hasStagedChanges,
+	hasStagedChanges: _hasStagedChanges,
 	canGenerate,
 	agentName,
 	hasAnyChanges,
+	hasCommits,
+	hasMergeConflicts,
+	amend,
+	onAmendChange,
+	signCommit,
+	onSignCommitChange,
+	showSignOption,
 	onCommit,
+	onCommitAndPush,
+	onCommitAndSync,
 	onGenerateMessage,
 	committing,
 	generating,
 }: CommitBoxProps) {
 	const canCommit =
-		hasAnyChanges && message.trim().length > 0 && !committing;
+		hasAnyChanges &&
+		message.trim().length > 0 &&
+		!committing &&
+		!hasMergeConflicts;
 
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent) => {
@@ -62,14 +85,43 @@ export function CommitBox({
 		<div className="scm-commit-box">
 			<textarea
 				className="scm-commit-textarea"
-				placeholder="Commit message..."
+				placeholder={
+					hasMergeConflicts
+						? 'Resolve merge conflicts before committing'
+						: 'Commit message...'
+				}
 				value={message}
 				onChange={(e) =>
 					onMessageChange(e.target.value)
 				}
 				onKeyDown={handleKeyDown}
 				rows={3}
+				disabled={hasMergeConflicts}
 			/>
+			<label className="scm-commit-amend">
+				<input
+					type="checkbox"
+					checked={amend}
+					disabled={!hasCommits || hasMergeConflicts}
+					onChange={(e) =>
+						onAmendChange(e.target.checked)
+					}
+				/>
+				<span>Amend</span>
+			</label>
+			{showSignOption && (
+				<label className="scm-commit-amend scm-sign-row">
+					<input
+						type="checkbox"
+						checked={signCommit}
+						disabled={hasMergeConflicts}
+						onChange={(e) =>
+							onSignCommitChange(e.target.checked)
+						}
+					/>
+					<span>Sign commit</span>
+				</label>
+			)}
 			<div className="scm-commit-actions">
 				<button
 					type="button"
@@ -89,6 +141,26 @@ export function CommitBox({
 					<span>
 						{committing ? 'Committing...' : 'Commit'}
 					</span>
+				</button>
+				<button
+					type="button"
+					className="scm-commit-button secondary"
+					disabled={!canCommit}
+					onClick={onCommitAndPush}
+					title="Commit and push"
+				>
+					<ArrowUp size={14} weight="bold" />
+					<span>Commit &amp; Push</span>
+				</button>
+				<button
+					type="button"
+					className="scm-commit-button secondary"
+					disabled={!canCommit}
+					onClick={onCommitAndSync}
+					title="Commit, pull, and push"
+				>
+					<ArrowsClockwise size={14} weight="bold" />
+					<span>Commit &amp; Sync</span>
 				</button>
 				<button
 					type="button"

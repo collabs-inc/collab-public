@@ -10,28 +10,41 @@ import {
 	Plus,
 	Trash,
 	Check,
+	Tag,
 } from '@phosphor-icons/react';
-import type { GitBranch as GitBranchType } from '@collab/shared/git-types';
+import type {
+	GitBranch as GitBranchType,
+	GitTag,
+} from '@collab/shared/git-types';
 
 interface BranchPickerProps {
+	workspacePath: string;
 	currentBranch: string;
 	onSwitch: (branch: string) => Promise<void>;
 	onCreate: (name: string) => Promise<void>;
 	onDelete: (name: string) => Promise<void>;
+	onMerge?: (branch: string) => Promise<void>;
+	onRebase?: (branch: string) => Promise<void>;
+	onInteractiveRebase?: () => void;
 	onError: (msg: string) => void;
 }
 
 export function BranchPicker({
+	workspacePath,
 	currentBranch,
 	onSwitch,
 	onCreate,
 	onDelete,
+	onMerge,
+	onRebase,
+	onInteractiveRebase,
 	onError,
 }: BranchPickerProps) {
 	const [open, setOpen] = useState(false);
 	const [branches, setBranches] = useState<GitBranchType[]>(
 		[],
 	);
+	const [tags, setTags] = useState<GitTag[]>([]);
 	const [filter, setFilter] = useState('');
 	const [creating, setCreating] = useState(false);
 	const [newName, setNewName] = useState('');
@@ -41,12 +54,17 @@ export function BranchPicker({
 
 	const loadBranches = useCallback(async () => {
 		try {
-			const result = await window.api.gitBranches();
-			setBranches(result);
+			const [branchList, tagList] = await Promise.all([
+				window.api.gitBranches(workspacePath),
+				window.api.gitTags(workspacePath),
+			]);
+			setBranches(branchList);
+			setTags(tagList);
 		} catch {
 			setBranches([]);
+			setTags([]);
 		}
-	}, []);
+	}, [workspacePath]);
 
 	useEffect(() => {
 		if (open) {
@@ -59,7 +77,6 @@ export function BranchPicker({
 		}
 	}, [open, loadBranches]);
 
-	// Close on outside click
 	useEffect(() => {
 		if (!open) return;
 		const handler = (e: MouseEvent) => {
@@ -80,7 +97,6 @@ export function BranchPicker({
 			);
 	}, [open]);
 
-	// Close on Escape
 	useEffect(() => {
 		if (!open) return;
 		const handler = (e: KeyboardEvent) => {
@@ -92,11 +108,19 @@ export function BranchPicker({
 	}, [open]);
 
 	const handleSwitch = useCallback(
-		async (branch: string) => {
-			if (branch === currentBranch) return;
+		async (ref: string, isTag?: boolean) => {
+			if (ref === currentBranch) return;
+			if (
+				isTag &&
+				!window.confirm(
+					`Checkout tag "${ref}"? This puts you in detached HEAD state.`,
+				)
+			) {
+				return;
+			}
 			setLoading(true);
 			try {
-				await onSwitch(branch);
+				await onSwitch(ref);
 				setOpen(false);
 			} catch (err) {
 				onError(
@@ -130,6 +154,17 @@ export function BranchPicker({
 
 	const handleDelete = useCallback(
 		async (name: string) => {
+			if (name === currentBranch) {
+				onError('Cannot delete the current branch');
+				return;
+			}
+			if (
+				!window.confirm(
+					`Delete branch "${name}"?`,
+				)
+			) {
+				return;
+			}
 			setLoading(true);
 			try {
 				await onDelete(name);
@@ -144,22 +179,22 @@ export function BranchPicker({
 				setLoading(false);
 			}
 		},
-		[onDelete, onError, loadBranches],
+		[currentBranch, onDelete, onError, loadBranches],
 	);
 
+	const q = filter.toLowerCase();
 	const localBranches = branches.filter(
 		(b) =>
 			!b.isRemote &&
-			b.name
-				.toLowerCase()
-				.includes(filter.toLowerCase()),
+			b.name.toLowerCase().includes(q),
 	);
 	const remoteBranches = branches.filter(
 		(b) =>
 			b.isRemote &&
-			b.name
-				.toLowerCase()
-				.includes(filter.toLowerCase()),
+			b.name.toLowerCase().includes(q),
+	);
+	const filteredTags = tags.filter((t) =>
+		t.name.toLowerCase().includes(q),
 	);
 
 	return (
@@ -266,9 +301,104 @@ export function BranchPicker({
 								))}
 							</div>
 						)}
+
+						{filteredTags.length > 0 && (
+							<div className="scm-branch-group">
+								<div className="scm-branch-group-label">
+									Tags
+								</div>
+								{filteredTags.map((t) => (
+									<div
+										key={t.name}
+										className="scm-branch-item tag"
+										onClick={() =>
+											handleSwitch(
+												t.name,
+												true,
+											)
+										}
+									>
+										<Tag
+											size={12}
+											weight="bold"
+										/>
+										<span className="scm-branch-item-name">
+											{t.name}
+										</span>
+									</div>
+								))}
+							</div>
+						)}
 					</div>
 
 					<div className="scm-branch-footer">
+						{onMerge && (
+							<button
+								type="button"
+								className="scm-branch-item"
+								onClick={async () => {
+									const branch = localBranches.find(
+										(b) => !b.current,
+									)?.name;
+									if (!branch) return;
+									const name = window.prompt(
+										'Merge branch into current:',
+										branch,
+									);
+									if (name) {
+										try {
+											await onMerge(name);
+										} catch (err) {
+											onError(
+												err instanceof Error
+													? err.message
+													: 'Merge failed',
+											);
+										}
+									}
+								}}
+							>
+								Merge branch…
+							</button>
+						)}
+						{onRebase && (
+							<button
+								type="button"
+								className="scm-branch-item"
+								onClick={async () => {
+									const branch = localBranches.find(
+										(b) => !b.current,
+									)?.name;
+									if (!branch) return;
+									const name = window.prompt(
+										'Rebase current onto:',
+										branch,
+									);
+									if (name) {
+										try {
+											await onRebase(name);
+										} catch (err) {
+											onError(
+												err instanceof Error
+													? err.message
+													: 'Rebase failed',
+											);
+										}
+									}
+								}}
+							>
+								Rebase onto…
+							</button>
+						)}
+						{onInteractiveRebase && (
+							<button
+								type="button"
+								className="scm-branch-item"
+								onClick={onInteractiveRebase}
+							>
+								Interactive rebase…
+							</button>
+						)}
 						{creating ? (
 							<div className="scm-branch-create-input">
 								<input
@@ -312,6 +442,12 @@ export function BranchPicker({
 							</button>
 						)}
 					</div>
+
+					{loading && (
+						<div className="scm-branch-loading">
+							Working...
+						</div>
+					)}
 				</div>
 			)}
 		</div>

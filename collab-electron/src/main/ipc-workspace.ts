@@ -67,7 +67,7 @@ function ensureGitignoreEntry(workspacePath: string): void {
   );
 }
 
-function initWorkspaceFiles(workspacePath: string): void {
+export function initWorkspaceFiles(workspacePath: string): void {
   const collabDir = join(workspacePath, ".collaborator");
   mkdirSync(collabDir, { recursive: true });
   ensureGitignoreEntry(workspacePath);

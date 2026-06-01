@@ -1,0 +1,7 @@
+{
+  "name": "scm-screenshots-deps",
+  "private": true,
+  "dependencies": {
+    "playwright": "^1.58.0"
+  }
+}

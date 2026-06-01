@@ -14,12 +14,14 @@ import {
 import type { GitStash } from '@collab/shared/git-types';
 
 interface StashSectionProps {
+	workspacePath: string;
 	isActive: boolean;
 	onRefresh: () => void;
 	onError: (msg: string) => void;
 }
 
 export function StashSection({
+	workspacePath,
 	isActive,
 	onRefresh,
 	onError,
@@ -32,12 +34,13 @@ export function StashSection({
 
 	const loadStashes = useCallback(async () => {
 		try {
-			const list = await window.api.gitStashList();
+			const list =
+				await window.api.gitStashList(workspacePath);
 			setStashes(list);
 		} catch {
 			setStashes([]);
 		}
-	}, []);
+	}, [workspacePath]);
 
 	useEffect(() => {
 		if (isActive) loadStashes();
@@ -46,6 +49,7 @@ export function StashSection({
 	const handleSave = useCallback(async () => {
 		try {
 			await window.api.gitStashSave(
+				workspacePath,
 				stashMessage.trim() || undefined,
 			);
 			setStashInput(false);
@@ -59,12 +63,21 @@ export function StashSection({
 					: 'Stash failed',
 			);
 		}
-	}, [stashMessage, loadStashes, onRefresh, onError]);
+	}, [
+		workspacePath,
+		stashMessage,
+		loadStashes,
+		onRefresh,
+		onError,
+	]);
 
 	const handlePop = useCallback(
 		async (index: number) => {
 			try {
-				await window.api.gitStashPop(index);
+				await window.api.gitStashPop(
+					workspacePath,
+					index,
+				);
 				await loadStashes();
 				onRefresh();
 			} catch (err) {
@@ -75,13 +88,16 @@ export function StashSection({
 				);
 			}
 		},
-		[loadStashes, onRefresh, onError],
+		[workspacePath, loadStashes, onRefresh, onError],
 	);
 
 	const handleApply = useCallback(
 		async (index: number) => {
 			try {
-				await window.api.gitStashApply(index);
+				await window.api.gitStashApply(
+					workspacePath,
+					index,
+				);
 				await loadStashes();
 				onRefresh();
 			} catch (err) {
@@ -92,13 +108,16 @@ export function StashSection({
 				);
 			}
 		},
-		[loadStashes, onRefresh, onError],
+		[workspacePath, loadStashes, onRefresh, onError],
 	);
 
 	const handleDrop = useCallback(
 		async (index: number) => {
 			try {
-				await window.api.gitStashDrop(index);
+				await window.api.gitStashDrop(
+					workspacePath,
+					index,
+				);
 				await loadStashes();
 			} catch (err) {
 				onError(
@@ -108,7 +127,7 @@ export function StashSection({
 				);
 			}
 		},
-		[loadStashes, onError],
+		[workspacePath, loadStashes, onError],
 	);
 
 	return (

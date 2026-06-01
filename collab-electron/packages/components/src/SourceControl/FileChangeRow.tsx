@@ -11,11 +11,13 @@ interface FileChangeRowProps {
 	filename: string;
 	dir: string;
 	status: GitChangeStatus;
-	section: 'staged' | 'unstaged' | 'untracked';
+	section: 'staged' | 'unstaged' | 'untracked' | 'merge';
+	lfs?: boolean;
 	onStage?: () => void;
 	onUnstage?: () => void;
 	onDiscard?: () => void;
 	onClick: () => void;
+	onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 export function FileChangeRow({
@@ -27,6 +29,8 @@ export function FileChangeRow({
 	onUnstage,
 	onDiscard,
 	onClick,
+	onContextMenu,
+	lfs,
 }: FileChangeRowProps) {
 	const [confirming, setConfirming] = useState(false);
 	const confirmTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -53,7 +57,11 @@ export function FileChangeRow({
 	const IconComponent = iconDef.icon;
 
 	return (
-		<div className="scm-file-row" onClick={onClick}>
+		<div
+			className="scm-file-row"
+			onClick={onClick}
+			onContextMenu={onContextMenu}
+		>
 			<span className="scm-file-icon">
 				<IconComponent
 					size={14}
@@ -121,6 +129,11 @@ export function FileChangeRow({
 					</>
 				)}
 			</span>
+			{lfs && (
+				<span className="scm-file-badge badge-M" title="Git LFS">
+					LFS
+				</span>
+			)}
 			<span
 				className={`scm-file-badge badge-${status}`}
 			>
