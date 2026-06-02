@@ -127,3 +127,11 @@ export function getTerminalTarget(): TerminalTarget {
   const target = getPref(config, "terminalTarget");
   return isTerminalTarget(target) ? target : "auto";
 }
+
+export function getTerminalCommand(): string | null {
+  const config = loadConfig();
+  const value = getPref(config, "terminalCommand");
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}

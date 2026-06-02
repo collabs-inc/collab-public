@@ -20,6 +20,7 @@ interface SettingsApi {
     label: string;
     isDefault?: boolean;
   }>>;
+  checkShellCommand: (command: string) => Promise<boolean>;
   setTheme: (mode: string) => Promise<void>;
   getAppVersion: () => Promise<string>;
   getAgents: () => Promise<AgentStatus[]>;
@@ -386,6 +387,90 @@ function RadioOption({
   );
 }
 
+function ShellCommandField() {
+  const [value, setValue] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [status, setStatus] = useState<"ok" | "missing" | null>(null);
+
+  const validate = useCallback(async (command: string) => {
+    const trimmed = command.trim();
+    if (trimmed === "") {
+      setStatus(null);
+      return;
+    }
+    try {
+      const exists = await api.checkShellCommand(trimmed);
+      setStatus(exists ? "ok" : "missing");
+    } catch {
+      setStatus(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    api.getPref("terminalCommand")
+      .then((v) => {
+        if (typeof v === "string") {
+          setValue(v);
+          void validate(v);
+        }
+      })
+      .catch(() => { })
+      .finally(() => setLoaded(true));
+  }, [validate]);
+
+  async function commit() {
+    const trimmed = value.trim();
+    await api.setPref("terminalCommand", trimmed);
+    await validate(trimmed);
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">Shell command</p>
+      <input
+        type="text"
+        spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+        disabled={!loaded}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setStatus(null);
+        }}
+        onBlur={() => { void commit(); }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        placeholder="Default (login shell)"
+        className="w-full rounded-md px-3 py-2 text-sm font-mono focus:outline-none"
+        style={{
+          backgroundColor:
+            "color-mix(in srgb, var(--foreground) 6%, transparent)",
+          border: `1px solid ${status === "missing"
+            ? "#ef4444"
+            : "color-mix(in srgb, var(--foreground) 15%, transparent)"}`,
+          color: "var(--foreground)",
+        }}
+      />
+      {status === "missing" ? (
+        <p className="text-xs" style={{ color: "#ef4444" }}>
+          Not found on PATH. New terminals will fall back to your login shell.
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Name or path of a shell binary (e.g.
+          {" "}
+          <span className="font-mono">/bin/bash</span>
+          ). Leave empty to use your login shell.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function MacTerminalPane() {
   const [mode, setMode] = useState<TerminalMode>("sidecar");
 
@@ -410,6 +495,8 @@ function MacTerminalPane() {
           Changes take effect for new terminals.
         </p>
       </div>
+
+      <ShellCommandField />
 
       <div className="space-y-2">
         <p className="text-sm font-medium">Terminal backend</p>
