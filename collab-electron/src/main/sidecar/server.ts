@@ -7,6 +7,7 @@ import type { IDisposable } from "node-pty";
 import { displayCommandName } from "@collab/shared/path-utils";
 import { cleanupEndpoint, prepareEndpoint } from "../ipc-endpoint";
 import { RingBuffer } from "./ring-buffer";
+import { slog } from "./log";
 import {
   makeResponse,
   makeError,
@@ -353,6 +354,28 @@ export class SidecarServer {
     const displayName = params.displayName || displayCommandName(command);
     const cwdHostPath = params.cwdHostPath || params.cwd;
 
+    slog("session.create", {
+      sessionId,
+      command,
+      args,
+      cwd: params.cwd,
+      target,
+      cols: params.cols,
+      rows: params.rows,
+      env: {
+        SHELL: env.SHELL,
+        ZDOTDIR: env.ZDOTDIR,
+        _COLLAB_ZDOTDIR: env._COLLAB_ZDOTDIR,
+        TERM: env.TERM,
+        LANG: env.LANG,
+        COLLAB_TILE_ID: env.COLLAB_TILE_ID,
+        hasPATH: Boolean(env.PATH),
+        pathEntries: env.PATH
+          ? env.PATH.split(process.platform === "win32" ? ";" : ":").length
+          : 0,
+      },
+    });
+
     let ptyProcess: pty.IPty;
     try {
       ptyProcess = pty.spawn(command, args, {
@@ -365,6 +388,13 @@ export class SidecarServer {
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      slog("pty.spawn failed", {
+        sessionId,
+        command,
+        args,
+        cwd: params.cwd,
+        error: msg,
+      });
       process.stderr.write(
         `pty.spawn failed: command=${command} args=${JSON.stringify(args)}`
         + ` cwd=${params.cwd} error=${msg}\n`,
@@ -372,6 +402,8 @@ export class SidecarServer {
       sock.write(makeError(id, -32000, `Failed to spawn: ${msg}`));
       return;
     }
+
+    slog("pty.spawn ok", { sessionId, pid: ptyProcess.pid, command });
 
     const ringBuffer = new RingBuffer(this.opts.ringBufferBytes);
     const terminateProcess = this.createTerminateProcess(ptyProcess);
@@ -412,8 +444,16 @@ export class SidecarServer {
       }
     });
 
-    ptyProcess.onExit(({ exitCode }) => {
+    ptyProcess.onExit(({ exitCode, signal }) => {
       session.exited = true;
+      slog("session.exited", {
+        sessionId,
+        exitCode,
+        signal,
+        lifetimeMs: Date.now() - Date.parse(session.createdAt),
+        bytesWritten: ringBuffer.bytesWritten,
+        outputTail: ringBuffer.snapshot().subarray(-800).toString("utf8"),
+      });
       // Notify all control clients
       const notification = makeNotification("session.exited", {
         sessionId,

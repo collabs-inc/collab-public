@@ -33,6 +33,7 @@ import {
 } from "./sidecar/protocol";
 import { COLLAB_DIR } from "./paths";
 import { resolveTerminalTarget } from "./terminal-target";
+import { nearestExistingDir } from "./cwd-fallback";
 
 interface PtySession {
   pty: pty.IPty;
@@ -103,6 +104,22 @@ function sendToSender(
   if (sender && !sender.isDestroyed()) {
     sender.send(channel, payload);
   }
+}
+
+function notifyCwdFallback(
+  sessionId: string,
+  senderWebContentsId: number | undefined,
+  requestedCwd: string,
+  actualCwd: string,
+): void {
+  if (path.resolve(requestedCwd) === actualCwd) return;
+  const notice =
+    `\r\n\x1b[33m⚠ directory not found: ${requestedCwd}\r\n`
+    + `  opened in ${actualCwd} instead\x1b[0m\r\n`;
+  sendToSender(senderWebContentsId, "pty:data", {
+    sessionId,
+    data: Buffer.from(notice, "utf8"),
+  });
 }
 
 function shouldBatchWindowsPowerShellOutput(sessionId: string): boolean {
@@ -245,6 +262,9 @@ async function doEnsureSidecar(): Promise<void> {
           sessionId: string;
           exitCode: number;
         };
+        console.log(
+          `[pty] session.exited sessionId=${sessionId} exitCode=${exitCode}`,
+        );
         clearPendingPtyData(sessionId);
         dataSockets.get(sessionId)?.destroy();
         dataSockets.delete(sessionId);
@@ -298,7 +318,11 @@ async function spawnSidecar(): Promise<void> {
       detached: true,
       stdio: ["ignore", "ignore", "pipe"],
       windowsHide: true,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: "1",
+        COLLAB_SIDECAR_LOG_DIR: path.join(COLLAB_DIR, "logs"),
+      },
     },
   );
   child.stderr?.on("data", (chunk: Buffer) => {
@@ -485,7 +509,15 @@ export async function createSession(
   cwdHostPath: string;
   cwdGuestPath?: string;
 }> {
-  const resolvedCwd = cwd || os.homedir();
+  const requestedCwd = cwd || os.homedir();
+  // A shell spawned with a missing cwd exits immediately (chdir fails),
+  // which silently closes the tile. Land in the nearest existing parent.
+  const resolvedCwd = nearestExistingDir(requestedCwd);
+  if (resolvedCwd !== path.resolve(requestedCwd)) {
+    console.log(
+      `[pty] cwd not found: ${requestedCwd} -> using ${resolvedCwd}`,
+    );
+  }
   const shell = process.env.SHELL || "/bin/zsh";
   const c = cols || 80;
   const r = rows || 24;
@@ -554,6 +586,8 @@ export async function createSession(
       injectOsc7Hook(sessionId, shell);
     }
 
+    notifyCwdFallback(sessionId, senderWebContentsId, requestedCwd, resolvedCwd);
+
     return {
       sessionId,
       shell,
@@ -600,7 +634,14 @@ export async function createSession(
   }, {
     cwdGuestPath: resolvedTarget.cwdGuestPath,
   });
+  console.log(
+    `[pty] createSession target=${resolvedTarget.target}`
+    + ` command=${resolvedTarget.command}`
+    + ` args=${JSON.stringify(resolvedTarget.args)}`
+    + ` cwd=${resolvedTarget.cwd}`,
+  );
   const { sessionId, socketPath } = await client.createSession(createParams);
+  console.log(`[pty] createSession ok sessionId=${sessionId}`);
 
   const dataSock = await client.attachDataSocket(
     socketPath,
@@ -635,6 +676,8 @@ export async function createSession(
   if (!zshIntegrated) {
     injectOsc7Hook(sessionId, resolvedTarget.command);
   }
+
+  notifyCwdFallback(sessionId, senderWebContentsId, requestedCwd, resolvedCwd);
 
   return withOptionalFields({
     sessionId,

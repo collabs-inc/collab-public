@@ -106,6 +106,7 @@ export default function App() {
 	const fileMtimeRef = useRef<string | null>(null);
 	const selectedPathRef = useRef(selectedPath);
 	const latestLoadTokenRef = useRef<symbol | null>(null);
+	const mainRef = useRef<HTMLElement>(null);
 	selectedPathRef.current = selectedPath;
 
 	const [isTileMode] = useState(
@@ -402,6 +403,13 @@ export default function App() {
 			});
 	}, [selectedPath]);
 
+	// Reset scroll to the top whenever a different file is opened. Keyed on
+	// loadedPath so in-place reloads (fs change, focus, wikilink update) that
+	// only refresh content keep the reader's position.
+	useEffect(() => {
+		if (mainRef.current) mainRef.current.scrollTop = 0;
+	}, [loadedPath]);
+
 	const viewerItem = useMemo<ViewerItem | null>(() => {
 		if (!loadedPath || fileError) return null;
 		return parseFileToViewerItem(
@@ -625,7 +633,7 @@ export default function App() {
 					</div>
 				);
 			})()}
-			<main className="main-content scrollbar-hover">
+			<main ref={mainRef} className="main-content scrollbar-hover">
 				{hasCoverImage && (
 					<div className="item-cover-image">
 						<img

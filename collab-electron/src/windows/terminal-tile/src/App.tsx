@@ -45,6 +45,21 @@ function App() {
           window.api.notifyPtySessionId(
             result.sessionId,
           );
+          // If the requested cwd no longer existed, the main process
+          // opened the shell in the nearest existing parent. Report that
+          // corrected cwd so it becomes the default for subsequent
+          // terminals and the fallback notice doesn't recur.
+          const requestedCwd = nextCwd ?? cwd;
+          if (
+            requestedCwd
+            && result.cwdHostPath
+            && result.cwdHostPath !== requestedCwd
+          ) {
+            window.api.notifyCwdChanged(
+              result.sessionId,
+              result.cwdHostPath,
+            );
+          }
         })
         .catch(() => {
           setExited(true);

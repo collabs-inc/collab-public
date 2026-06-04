@@ -660,7 +660,7 @@ async function init() {
 	viewport.init(viewportState, () => {
 		tileManager.repositionAllTiles();
 		edgeIndicators.update();
-		minimap.update();
+		minimap.wake();
 		tileManager.saveCanvasDebounced();
 	});
 

@@ -19,7 +19,7 @@ interface TerminalTabProps {
 	visible: boolean;
 	restored?: boolean;
 	scrollbackData?: string | null;
-	mode?: "tmux" | "sidecar";
+	mode?: "tmux" | "sidecar" | undefined;
 }
 
 function TerminalTab({
@@ -313,10 +313,10 @@ function TerminalTab({
 			// Extract paths synchronously before any await
 			const rawPaths: string[] = [];
 			for (let i = 0; i < event.dataTransfer.files.length; i++) {
+				const file = event.dataTransfer.files[i];
+				if (!file) continue;
 				try {
-					const p = window.api.getPathForFile(
-						event.dataTransfer.files[i],
-					);
+					const p = window.api.getPathForFile(file);
 					if (p) rawPaths.push(p);
 				} catch { /* skip non-file items */ }
 			}

@@ -228,6 +228,10 @@ export function createMinimap({ viewportEl, wrapperEl, viewportState, getTiles, 
 		update() {
 			updateVisibilityWithIdle();
 			scheduleRedraw();
+		},
+		wake() {
+			updateVisibilityWithIdle();
+			scheduleRedraw();
 			scheduleIdle();
 		},
 		getViewportRect() {

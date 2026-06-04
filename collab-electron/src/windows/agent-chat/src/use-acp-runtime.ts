@@ -5,78 +5,9 @@ import {
   type ChatModelRunResult,
   type ThreadMessageLike,
 } from "@assistant-ui/react";
+import type { AcpUpdate } from "@collab/shared/window-api";
 
-export type AcpUpdate = {
-  sessionId: string;
-  update: {
-    sessionUpdate: string;
-    content?:
-      | { type: string; text?: string }
-      | Array<{
-        type: string;
-        content?: { type: string; text?: string };
-      }>;
-    toolCallId?: string;
-    title?: string;
-    kind?: string;
-    status?: string;
-    rawInput?: unknown;
-    rawOutput?: unknown;
-  };
-};
-
-declare global {
-  interface Window {
-    api: {
-      agentSpawn: (
-        cwd: string,
-      ) => Promise<{
-        sessionId: string;
-        resumed: boolean;
-        cachedMessages: unknown[];
-      }>;
-      agentPrompt: (
-        sessionId: string, text: string,
-      ) => Promise<void>;
-      agentCancel: (
-        sessionId: string,
-      ) => Promise<void>;
-      agentKill: (
-        sessionId: string,
-      ) => Promise<void>;
-      agentSaveMessages: (
-        messages: unknown[],
-      ) => Promise<void>;
-      onAgentUpdate: (
-        cb: (params: AcpUpdate) => void,
-      ) => () => void;
-      onAgentPromptComplete: (
-        cb: (data: {
-          sessionId: string; stopReason: string;
-        }) => void,
-      ) => () => void;
-      onAgentPromptError: (
-        cb: (data: {
-          sessionId: string; error: string;
-        }) => void,
-      ) => () => void;
-      onAgentExit: (
-        cb: (data: { sessionId: string }) => void,
-      ) => () => void;
-      onAgentSessionReady: (
-        cb: (data: { sessionId: string }) => void,
-      ) => () => void;
-      onAgentSessionFailed: (
-        cb: (data: { sessionId: string }) => void,
-      ) => () => void;
-      sendToHost: (
-        channel: string, ...args: unknown[]
-      ) => void;
-    };
-  }
-}
-
-
+export type { AcpUpdate };
 
 /**
  * ChatModelAdapter that bridges ACP IPC events into
