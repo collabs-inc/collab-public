@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SCM Screenshot Harness</title>
+    <style>
+      html,
+      body,
+      #root {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-sans);
+      }
+      body[data-scene="settings-git"] #root {
+        width: 720px;
+        height: 520px;
+      }
+      body[data-scene="viewer-diff"] #root {
+        width: 960px;
+        height: 640px;
+      }
+      body[data-scene^="scm"] #root {
+        width: 380px;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

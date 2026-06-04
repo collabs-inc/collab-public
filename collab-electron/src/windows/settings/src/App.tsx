@@ -8,6 +8,11 @@ import {
   Moon,
   Monitor,
   Terminal,
+  GitBranch,
+  Sparkle,
+  CheckCircle,
+  XCircle,
+  CircleNotch,
 } from "@phosphor-icons/react";
 
 type ThemeMode = "light" | "dark" | "system";
@@ -25,6 +30,17 @@ interface SettingsApi {
   getAgents: () => Promise<AgentStatus[]>;
   installSkill: (agentId: string) => Promise<{ ok: boolean }>;
   uninstallSkill: (agentId: string) => Promise<{ ok: boolean }>;
+  aiHasKey: () => Promise<boolean>;
+  aiValidateKey: (key: string) => Promise<{ valid: boolean }>;
+  getConfig: () => Promise<{ workspaces: string[] }>;
+  gitConfigDisplay: (
+    workspacePath?: string,
+  ) => Promise<{
+    userName: string;
+    userEmail: string;
+    credentialHelper: string;
+    gpgSign: boolean;
+  }>;
   close: () => void;
 }
 
@@ -595,7 +611,13 @@ function IntegrationsPane() {
   );
 }
 
-type Pane = "appearance" | "terminal" | "integrations" | "controls";
+type Pane =
+  | "appearance"
+  | "terminal"
+  | "integrations"
+  | "controls"
+  | "ai"
+  | "git";
 
 const NAV_ITEMS: {
   id: Pane;
@@ -606,7 +628,236 @@ const NAV_ITEMS: {
     { id: "terminal", label: "Terminal", icon: Terminal },
     { id: "integrations", label: "Integrations", icon: PuzzlePiece },
     { id: "controls", label: "Controls", icon: Keyboard },
+    { id: "ai", label: "AI", icon: Sparkle },
+    { id: "git", label: "Git", icon: GitBranch },
   ];
+
+function GitPane() {
+  const [cfg, setCfg] = useState<{
+    userName: string;
+    userEmail: string;
+    credentialHelper: string;
+    gpgSign: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    void api
+      .getConfig()
+      .then((c) => {
+        const ws = c.workspaces?.[0];
+        if (!ws) return;
+        return api.gitConfigDisplay(ws);
+      })
+      .then((display) => {
+        if (display) setCfg(display);
+      })
+      .catch(() => {});
+  }, []);
+
+  return (
+    <div className="space-y-6 p-6">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold">Git</h2>
+        <p className="text-sm text-muted-foreground">
+          Read-only view of your system git configuration. Manage credentials
+          with your OS credential manager or{" "}
+          <code className="text-xs">git config</code> in a terminal.
+        </p>
+      </div>
+      {cfg ? (
+        <dl className="space-y-3 text-sm font-mono">
+          <div>
+            <dt className="text-muted-foreground">user.name</dt>
+            <dd>{cfg.userName || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">user.email</dt>
+            <dd>{cfg.userEmail || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">credential.helper</dt>
+            <dd>{cfg.credentialHelper || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">commit.gpgsign</dt>
+            <dd>{cfg.gpgSign ? "true" : "false"}</dd>
+          </div>
+        </dl>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Open a workspace to view git configuration.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AiPane() {
+  const [apiKey, setApiKey] = useState("");
+  const [hasExistingKey, setHasExistingKey] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<
+    "valid" | "invalid" | null
+  >(null);
+
+  useEffect(() => {
+    void api
+      .aiHasKey()
+      .then(setHasExistingKey)
+      .catch(() => {});
+  }, []);
+
+  async function handleSave() {
+    if (!apiKey.trim() || apiKey.startsWith("sk-ant-\u2022")) return;
+    setValidating(true);
+    setValidationResult(null);
+    try {
+      const { valid } = await api.aiValidateKey(apiKey.trim());
+      if (valid) {
+        await api.setPref("ai.apiKey", apiKey.trim());
+        setHasExistingKey(true);
+        setValidationResult("valid");
+        setApiKey("");
+      } else {
+        setValidationResult("invalid");
+      }
+    } catch {
+      setValidationResult("invalid");
+    } finally {
+      setValidating(false);
+    }
+  }
+
+  async function handleRemove() {
+    await api.setPref("ai.apiKey", "");
+    setHasExistingKey(false);
+    setApiKey("");
+    setValidationResult(null);
+  }
+
+  return (
+    <div className="space-y-6 p-6">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold">AI</h2>
+        <p className="text-sm text-muted-foreground">
+          Configure AI-powered features like commit message generation.
+        </p>
+      </div>
+
+      <div
+        className="rounded-md px-3 py-2.5 text-xs"
+        style={{
+          backgroundColor:
+            "color-mix(in srgb, var(--foreground) 5%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--border) 40%, transparent)",
+          color: "var(--muted-foreground)",
+          lineHeight: 1.5,
+        }}
+      >
+        If you have <strong style={{ color: "var(--foreground)" }}>Claude Code</strong>,{" "}
+        <strong style={{ color: "var(--foreground)" }}>Codex CLI</strong>, or{" "}
+        <strong style={{ color: "var(--foreground)" }}>Gemini CLI</strong> installed,
+        commit messages will use your existing subscription automatically.
+        An API key is only needed as a fallback.
+      </div>
+
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Anthropic API Key (Fallback)</p>
+          <p className="text-xs text-muted-foreground">
+            Only used if no CLI agent is installed.
+          </p>
+        </div>
+
+        {hasExistingKey && !apiKey && (
+          <div className="flex items-center gap-2">
+            <div
+              className="flex-1 rounded-md px-3 py-2 text-sm"
+              style={{
+                backgroundColor:
+                  "color-mix(in srgb, var(--foreground) 5%, transparent)",
+                border:
+                  "1px solid color-mix(in srgb, var(--border) 60%, transparent)",
+                color: "var(--muted-foreground)",
+              }}
+            >
+              sk-ant-\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022
+            </div>
+            <button
+              type="button"
+              onClick={handleRemove}
+              className="rounded-md px-3 py-2 text-sm font-medium cursor-pointer"
+              style={{
+                border:
+                  "1px solid color-mix(in srgb, var(--border) 60%, transparent)",
+                background: "none",
+                color: "var(--destructive)",
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        )}
+
+        {(!hasExistingKey || apiKey) && (
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              placeholder="sk-ant-api03-..."
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                setValidationResult(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleSave();
+              }}
+              className="flex-1 rounded-md px-3 py-2 text-sm outline-none"
+              style={{
+                backgroundColor:
+                  "color-mix(in srgb, var(--foreground) 5%, transparent)",
+                border:
+                  "1px solid color-mix(in srgb, var(--border) 60%, transparent)",
+                color: "var(--foreground)",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={!apiKey.trim() || validating}
+              className="rounded-md px-3 py-2 text-sm font-medium cursor-pointer"
+              style={{
+                background: "var(--foreground)",
+                color: "var(--background)",
+                border: "none",
+                opacity: !apiKey.trim() || validating ? 0.4 : 1,
+              }}
+            >
+              {validating ? (
+                <CircleNotch size={14} className="animate-spin" />
+              ) : (
+                "Save"
+              )}
+            </button>
+          </div>
+        )}
+
+        {validationResult === "valid" && (
+          <div className="flex items-center gap-1.5 text-xs" style={{ color: "#4ade80" }}>
+            <CheckCircle size={14} weight="fill" />
+            <span>API key validated and saved.</span>
+          </div>
+        )}
+        {validationResult === "invalid" && (
+          <div className="flex items-center gap-1.5 text-xs" style={{ color: "var(--destructive)" }}>
+            <XCircle size={14} weight="fill" />
+            <span>Invalid API key. Please check and try again.</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function CloseButton({ onClick }: { onClick: () => void }) {
   return (
@@ -730,6 +981,8 @@ export default function App() {
         {activePane === "terminal" && <TerminalPane />}
         {activePane === "integrations" && <IntegrationsPane />}
         {activePane === "controls" && <ControlsPane />}
+        {activePane === "ai" && <AiPane />}
+        {activePane === "git" && <GitPane />}
       </div>
     </div>
   );

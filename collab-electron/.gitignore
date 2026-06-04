@@ -21,6 +21,8 @@ data/
 
 # Playwright MCP
 .playwright-mcp/
+scripts/scm-screenshots/.deps/node_modules/
+scripts/scm-screenshots/harness/fixture-data.json
 
 # Editor/IDE
 *.swp
@@ -40,6 +42,10 @@ electron/out/
 # Back up these files separately when migrating machines
 .claude/
 CLAUDE.md
-docs/
+# Private docs — allow versioned SCM QA docs (tracked specs live under docs/superpowers/)
+docs/*
+!docs/SCM_TEST_MATRIX.md
+!docs/screenshots/
+!docs/screenshots/**
 dev-app-update.yml
 build-debug.log

@@ -550,7 +550,11 @@ ipcMain.handle("shell:get-view-config", () => {
 
 ipcMain.handle(
   "pref:get",
-  (_event, key: string) => getPref(config, key),
+  (_event, key: string) => {
+    // Never expose API keys to renderer processes
+    if (key === "ai.apiKey") return null;
+    return getPref(config, key);
+  },
 );
 
 ipcMain.handle(

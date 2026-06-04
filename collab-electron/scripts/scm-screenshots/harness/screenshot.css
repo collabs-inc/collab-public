@@ -1,0 +1,73 @@
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.screenshot-frame {
+  height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.scm-frame {
+  width: 360px;
+  height: 920px;
+  border-right: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.scm-frame .scm-container {
+  height: 100%;
+}
+
+.settings-frame {
+  width: 520px;
+  height: 420px;
+}
+
+.settings-git-screenshot .text-muted-foreground {
+  color: var(--muted-foreground);
+}
+
+.settings-git-screenshot .font-semibold {
+  font-weight: 600;
+}
+
+.settings-git-screenshot .font-mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.diff-frame {
+  width: 720px;
+  height: 480px;
+  display: flex;
+  flex-direction: column;
+}
+
+.diff-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  flex-shrink: 0;
+}
+
+.diff-title {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-weight: 600;
+}
+
+.diff-refs {
+  color: var(--muted-foreground);
+}
+
+.diff-frame .diff-editor-host {
+  flex: 1;
+  min-height: 0;
+}

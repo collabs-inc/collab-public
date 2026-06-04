@@ -1183,6 +1183,9 @@ async function init() {
 						focusSurface(lastNonModalSurface);
 					}
 				}
+				if (channel === "git-diff-open") {
+					singletonViewer.webview.style.display = "";
+				}
 				if (channel === "file-renamed") {
 					tileManager.updateTileForRename(
 						args[0], args[1],

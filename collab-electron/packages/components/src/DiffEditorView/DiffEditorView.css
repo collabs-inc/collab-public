@@ -1,0 +1,33 @@
+.diff-editor-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.diff-editor-hunks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.diff-editor-hunk-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.diff-editor-hunk-btn:hover {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.diff-editor-container {
+  flex: 1;
+  min-height: 0;
+}
