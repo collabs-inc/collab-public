@@ -30,6 +30,7 @@ function resolveInput(raw) {
  * @param {((id: string, url: string) => void)|null} [callbacks.onNavigate]
  * @param {((id: string) => void)|null} [callbacks.onRename]
  * @param {((id: string) => void)|null} [callbacks.onDuplicate]
+ * @param {((id: string) => void)|null} [callbacks.onToggleFullscreen]
  */
 export function createTileDOM(tile, callbacks) {
   const container = document.createElement("div");
@@ -165,6 +166,19 @@ export function createTileDOM(tile, callbacks) {
       callbacks.onOpenInViewer(tile.id);
     });
     btnGroup.appendChild(viewBtn);
+  }
+
+  if (tile.type === "term" && callbacks.onToggleFullscreen) {
+    const fsBtn = document.createElement("button");
+    fsBtn.className = "tile-action-btn tile-fullscreen-btn";
+    fsBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 1 1 1 1 4"/><polyline points="12 1 15 1 15 4"/><polyline points="4 15 1 15 1 12"/><polyline points="12 15 15 15 15 12"/></svg>`;
+    fsBtn.title = "Fullscreen";
+    fsBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+    fsBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      callbacks.onToggleFullscreen(tile.id);
+    });
+    btnGroup.appendChild(fsBtn);
   }
 
   const closeBtn = document.createElement("button");
@@ -313,6 +327,8 @@ export function startInlineRename(dom, tile, onCommit) {
  * @param {number} zoom
  */
 export function positionTile(container, tile, panX, panY, zoom) {
+  if (container.classList.contains("tile-fullscreen")) return;
+
   const sx = tile.x * zoom + panX;
   const sy = tile.y * zoom + panY;
 

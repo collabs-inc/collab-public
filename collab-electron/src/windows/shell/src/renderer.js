@@ -664,6 +664,12 @@ async function init() {
 		tileManager.saveCanvasDebounced();
 	});
 
+	viewport.setOnResize(() => {
+		tileManager.repositionAllTiles();
+		edgeIndicators.update();
+		minimap.update();
+	});
+
 	edgeIndicators.update();
 	minimap.update();
 
@@ -923,6 +929,13 @@ async function init() {
 	// -- Selection keyboard handlers --
 
 	window.addEventListener("keydown", (e) => {
+		if (e.key === "Escape" && tileManager.getFullscreenTileId()) {
+			tileManager.toggleTileFullscreen(
+				tileManager.getFullscreenTileId(),
+			);
+			return;
+		}
+
 		if (e.key === "Escape" && getSelectedTiles().length > 0) {
 			clearSelection();
 			tileManager.syncSelectionVisuals();

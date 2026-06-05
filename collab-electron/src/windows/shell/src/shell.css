@@ -1020,6 +1020,44 @@ body.platform-win {
 	padding: 0 2px 0 12px;
 }
 
+/* Fullscreen tile fills the entire canvas viewport */
+.canvas-tile.tile-fullscreen {
+	position: absolute;
+	inset: 0;
+	width: 100% !important;
+	height: 100% !important;
+	transform: none !important;
+	z-index: 109 !important;
+	border: none;
+}
+
+.canvas-tile.tile-fullscreen::before,
+.canvas-tile.tile-fullscreen::after {
+	display: none;
+}
+
+.canvas-tile.tile-fullscreen webview {
+	pointer-events: auto;
+}
+
+.canvas-tile.tile-fullscreen .tile-title-bar {
+	padding-left: 86px;
+	min-height: 38px;
+	-webkit-app-region: no-drag;
+	position: relative;
+	z-index: 101;
+}
+
+.has-fullscreen-tile > #grid-canvas,
+.has-fullscreen-tile > #edge-indicators,
+.has-fullscreen-tile > #zoom-indicator,
+.has-fullscreen-tile > #minimap-wrapper,
+.has-fullscreen-tile > #new-tile-btn,
+.has-fullscreen-tile > #tile-layer > .canvas-tile:not(.tile-fullscreen) {
+	display: none;
+}
+
+
 /* Tile webviews are non-interactive by default */
 .canvas-tile webview {
 	pointer-events: none;

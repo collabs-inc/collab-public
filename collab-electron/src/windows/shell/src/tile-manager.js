@@ -187,6 +187,36 @@ export function createTileManager({
 		}
 	}
 
+	let fullscreenTileId = null;
+	const panelViewer = tileLayer.parentElement;
+
+	function toggleTileFullscreen(id) {
+		const dom = tileDOMs.get(id);
+		if (!dom) return;
+
+		if (fullscreenTileId === id) {
+			dom.container.classList.remove("tile-fullscreen");
+			dom.container.style.cssText = "";
+			panelViewer.classList.remove("has-fullscreen-tile");
+			fullscreenTileId = null;
+			repositionAllTiles();
+		} else {
+			if (fullscreenTileId) {
+				const prev = tileDOMs.get(fullscreenTileId);
+				if (prev) {
+					prev.container.classList.remove("tile-fullscreen");
+					prev.container.style.cssText = "";
+				}
+			}
+			fullscreenTileId = id;
+			dom.container.classList.add("tile-fullscreen");
+			dom.container.style.cssText = "";
+			panelViewer.classList.add("has-fullscreen-tile");
+			focusCanvasTile(id);
+			repositionAllTiles();
+		}
+	}
+
 	// -- Webview spawning --
 
 	function spawnTerminalWebview(tile, autoFocus = false) {
@@ -490,6 +520,9 @@ export function createTileManager({
 				});
 				spawnTerminalWebview(newTile, true);
 				saveCanvasImmediate();
+			},
+			onToggleFullscreen: (id) => {
+				toggleTileFullscreen(id);
 			},
 			onRename: (id) => {
 				const t = getTile(id);
@@ -817,6 +850,8 @@ export function createTileManager({
 		getFocusedTileId: () => focusedTileId,
 		setFocusedTileId: (id) => { focusedTileId = id; },
 		renameTile,
+		toggleTileFullscreen,
+		getFullscreenTileId: () => fullscreenTileId,
 		updateTileForRename,
 		closeTilesForDeletedPaths,
 		broadcastToTileWebviews,
