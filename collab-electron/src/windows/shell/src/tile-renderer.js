@@ -168,7 +168,7 @@ export function createTileDOM(tile, callbacks) {
     btnGroup.appendChild(viewBtn);
   }
 
-  if (tile.type === "term" && callbacks.onToggleFullscreen) {
+  if (callbacks.onToggleFullscreen) {
     const fsBtn = document.createElement("button");
     fsBtn.className = "tile-action-btn tile-fullscreen-btn";
     fsBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 1 1 1 1 4"/><polyline points="12 1 15 1 15 4"/><polyline points="4 15 1 15 1 12"/><polyline points="12 15 15 15 15 12"/></svg>`;

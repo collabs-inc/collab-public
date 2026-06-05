@@ -1124,7 +1124,7 @@ async function init() {
 				tileManager.toggleTileFullscreen(fsId);
 			} else {
 				const focused = tileManager.getFocusedTile();
-				if (focused?.type === "term") {
+				if (focused) {
 					tileManager.toggleTileFullscreen(focused.id);
 				}
 			}
