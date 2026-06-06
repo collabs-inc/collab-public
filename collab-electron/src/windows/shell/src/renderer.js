@@ -6,7 +6,14 @@ import {
 } from "./canvas-state.js";
 import { attachMarquee } from "./tile-interactions.js";
 import { initDarkMode, applyCanvasOpacity } from "./dark-mode.js";
-import { createWebview, isFocusSearchShortcut } from "./webview-factory.js";
+import { createWebview } from "./webview-factory.js";
+import {
+	KEYBOARD_SHORTCUTS_PREF,
+	findKeyboardShortcutAction,
+	formatKeyboardShortcutBindings,
+	getEffectiveKeyboardShortcutBindings,
+	normalizeKeyboardShortcutOverrides,
+} from "@collab/shared/keyboard-shortcuts";
 import { createViewport } from "./canvas-viewport.js";
 import { createEdgeIndicators } from "./edge-indicators.js";
 import { createMinimap } from "./canvas-minimap.js";
@@ -17,7 +24,8 @@ import { createTileManager } from "./tile-manager.js";
 import { updateTileTitle, getTileLabel } from "./tile-renderer.js";
 
 const CANVAS_DBLCLICK_SUPPRESS_MS = 500;
-const IS_WINDOWS = window.shellApi.getPlatform() === "win32";
+const PLATFORM = window.shellApi.getPlatform();
+const IS_WINDOWS = PLATFORM === "win32";
 
 const viewportState = { panX: 0, panY: 0, zoom: 1 };
 
@@ -27,6 +35,57 @@ canvasEl.tabIndex = -1;
 
 document.documentElement.classList.toggle("platform-win", IS_WINDOWS);
 document.body.classList.toggle("platform-win", IS_WINDOWS);
+
+let keyboardShortcutOverrides = {};
+
+function setKeyboardShortcutOverrides(value) {
+	keyboardShortcutOverrides = normalizeKeyboardShortcutOverrides(value);
+	updateShortcutTooltips();
+}
+
+function getShortcutAction(input) {
+	return findKeyboardShortcutAction(
+		input,
+		keyboardShortcutOverrides,
+		PLATFORM,
+	);
+}
+
+function isShellHandledShortcutAction(action) {
+	return action !== "zoom-in" &&
+		action !== "zoom-out" &&
+		action !== "zoom-reset" &&
+		action !== "toggle-full-screen";
+}
+
+function shortcutLabels(action) {
+	return formatKeyboardShortcutBindings(
+		getEffectiveKeyboardShortcutBindings(
+			action,
+			keyboardShortcutOverrides,
+			PLATFORM,
+		),
+		PLATFORM,
+	);
+}
+
+function setShortcutTooltip(selector, action) {
+	const el = document.querySelector(selector);
+	if (!el) return;
+	const labels = shortcutLabels(action);
+	if (labels.length === 0) {
+		el.removeAttribute("data-shortcut");
+	} else {
+		el.dataset.shortcut = labels.join(" / ");
+	}
+}
+
+function updateShortcutTooltips() {
+	setShortcutTooltip("#nav-toggle", "sidebar-files");
+	setShortcutTooltip("#agent-toggle", "toggle-agent");
+	setShortcutTooltip("#settings-btn", "toggle-settings");
+	setShortcutTooltip("#new-tile-btn", "new-tile");
+}
 
 // -- Alpha banner dismiss --
 
@@ -48,12 +107,17 @@ window.shellApi.getPref("canvasOpacity").then((v) => {
 	applyCanvasOpacity(lastCanvasOpacity);
 	broadcastCanvasOpacity();
 });
+window.shellApi.getPref(KEYBOARD_SHORTCUTS_PREF).then((value) => {
+	setKeyboardShortcutOverrides(value);
+});
 
 window.shellApi.onPrefChanged((key, value) => {
 	if (key === "canvasOpacity") {
 		lastCanvasOpacity = value;
 		applyCanvasOpacity(value);
 		broadcastCanvasOpacity();
+	} else if (key === KEYBOARD_SHORTCUTS_PREF) {
+		setKeyboardShortcutOverrides(value);
 	}
 });
 
@@ -193,9 +257,10 @@ async function init() {
 		noteSurfaceFocus("viewer");
 	});
 	singletonViewer.setBeforeInput((event, detail) => {
-		if (!isFocusSearchShortcut(detail)) return;
+		const action = getShortcutAction(detail);
+		if (!action || !isShellHandledShortcutAction(action)) return;
 		event.preventDefault();
-		handleShortcut("focus-file-search");
+		handleShortcut(action);
 	});
 
 	const singletonWebviews = {
@@ -1130,20 +1195,10 @@ async function init() {
 	window.shellApi.onShortcut(handleShortcut);
 
 	window.addEventListener("keydown", (event) => {
-		if (!isFocusSearchShortcut(event)) return;
+		const action = getShortcutAction(event);
+		if (!action || !isShellHandledShortcutAction(action)) return;
 		event.preventDefault();
-		handleShortcut("focus-file-search");
-	});
-
-	window.addEventListener("keydown", (event) => {
-		if (!event.metaKey || event.shiftKey || event.altKey) return;
-		if (event.key === "n") {
-			event.preventDefault();
-			handleShortcut("new-tile");
-		} else if (event.key === "w") {
-			event.preventDefault();
-			handleShortcut("close-tile");
-		}
+		handleShortcut(action);
 	});
 
 	// -- Browser tile Cmd+L focus URL --

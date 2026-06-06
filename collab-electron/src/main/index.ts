@@ -37,6 +37,15 @@ import {
 import * as watcher from "./watcher";
 import * as gitReplay from "./git-replay";
 import { DISABLE_GIT_REPLAY } from "@collab/shared/replay-types";
+import {
+  KEYBOARD_SHORTCUTS_PREF,
+  findKeyboardShortcutAction,
+  getEffectiveKeyboardShortcutBindings,
+  isKeyboardShortcutAutoRepeat,
+  keyboardShortcutBindingToElectronAccelerator,
+  normalizeKeyboardShortcutOverrides,
+  type KeyboardShortcutActionId,
+} from "@collab/shared/keyboard-shortcuts";
 import * as pty from "./pty";
 import { updateManager, setupUpdateIPC } from "./updater";
 import { DEV_WORKTREE_ID } from "./paths";
@@ -166,75 +175,80 @@ function debouncedSaveWindowState(): void {
   }, 500);
 }
 
-function sendShortcut(action: string): void {
+const shortcutRecordingWebContents = new Set<number>();
+
+function sendShortcut(action: KeyboardShortcutActionId): void {
   mainWindow?.webContents.send("shell:shortcut", action);
 }
 
-const cmdOrCtrl = (input: Electron.Input): boolean =>
-  input.meta || input.control;
-const shiftCmdOrCtrl = (input: Electron.Input): boolean =>
-  input.shift && (input.meta || input.control);
-const altCmdOrCtrl = (input: Electron.Input): boolean =>
-  input.alt && (input.meta || input.control);
-const ctrlOnly = (input: Electron.Input): boolean =>
-  input.control && !input.meta;
-const altOnly = (input: Electron.Input): boolean =>
-  input.alt && !input.meta && !input.control && !input.shift;
-
-interface ShortcutEntry {
-  modifier: (input: Electron.Input) => boolean;
-  action: string;
+function getKeyboardShortcutOverrides() {
+  return normalizeKeyboardShortcutOverrides(
+    getPref(config, KEYBOARD_SHORTCUTS_PREF),
+  );
 }
 
-const TOGGLE_SHORTCUTS: Record<string, ShortcutEntry[]> = {
-  KeyB: [
-    { modifier: altCmdOrCtrl, action: "toggle-agent" },
-    { modifier: cmdOrCtrl, action: "sidebar-files" },
-  ],
-  Backslash: [{ modifier: cmdOrCtrl, action: "sidebar-files" }],
-  Comma: [{ modifier: cmdOrCtrl, action: "toggle-settings" }],
-  KeyO: [{ modifier: shiftCmdOrCtrl, action: "add-workspace" }],
-  KeyK: [{ modifier: cmdOrCtrl, action: "focus-file-search" }],
-  KeyN: [{ modifier: cmdOrCtrl, action: "new-tile" }],
-  KeyW: [{ modifier: cmdOrCtrl, action: "close-tile" }],
-  ArrowRight: [{ modifier: altOnly, action: "focus-tile-right" }],
-  ArrowLeft: [{ modifier: altOnly, action: "focus-tile-left" }],
-  ArrowUp: [{ modifier: altOnly, action: "focus-tile-up" }],
-  ArrowDown: [{ modifier: altOnly, action: "focus-tile-down" }],
-};
-
-const TOGGLE_SHORTCUT_KEYS: Record<string, ShortcutEntry[]> = {
-  ",": TOGGLE_SHORTCUTS.Comma!,
-  o: TOGGLE_SHORTCUTS.KeyO!,
-  k: TOGGLE_SHORTCUTS.KeyK!,
-  b: TOGGLE_SHORTCUTS.KeyB!,
-  n: TOGGLE_SHORTCUTS.KeyN!,
-  w: TOGGLE_SHORTCUTS.KeyW!,
-};
-
-function normalizeShortcutKey(key: string | undefined): string | null {
-  if (!key) return null;
-  return key.length === 1 ? key.toLowerCase() : key;
+function runKeyboardShortcutAction(action: KeyboardShortcutActionId): void {
+  if (action === "zoom-in") {
+    applyZoomToAll(globalZoomLevel + 0.25);
+  } else if (action === "zoom-out") {
+    applyZoomToAll(globalZoomLevel - 0.25);
+  } else if (action === "zoom-reset") {
+    applyZoomToAll(0);
+  } else if (action === "toggle-full-screen") {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setFullScreen(!mainWindow.isFullScreen());
+    }
+  } else {
+    sendShortcut(action);
+  }
 }
 
-function resolveToggleShortcut(
+function resolveKeyboardShortcut(
   input: Electron.Input,
-): ShortcutEntry | undefined {
-  const candidates = TOGGLE_SHORTCUTS[input.code]
-    ?? (normalizeShortcutKey(input.key)
-      ? TOGGLE_SHORTCUT_KEYS[normalizeShortcutKey(input.key)!]
-      : undefined);
-  return candidates?.find((s) => s.modifier(input));
+): KeyboardShortcutActionId | null {
+  return findKeyboardShortcutAction(
+    input,
+    getKeyboardShortcutOverrides(),
+    process.platform,
+  );
+}
+
+function getKeyboardShortcutAccelerator(
+  action: KeyboardShortcutActionId,
+): string | undefined {
+  const [binding] = getEffectiveKeyboardShortcutBindings(
+    action,
+    getKeyboardShortcutOverrides(),
+    process.platform,
+  );
+  if (!binding) return undefined;
+  return keyboardShortcutBindingToElectronAccelerator(binding) ?? undefined;
+}
+
+function menuShortcutOptions(
+  action: KeyboardShortcutActionId,
+): Pick<Electron.MenuItemConstructorOptions, "accelerator" | "registerAccelerator"> {
+  const accelerator = getKeyboardShortcutAccelerator(action);
+  return accelerator
+    ? { accelerator, registerAccelerator: false }
+    : { registerAccelerator: false };
 }
 
 function attachShortcutListener(target: WebContents): void {
+  target.once("destroyed", () => {
+    shortcutRecordingWebContents.delete(target.id);
+  });
+
   target.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
+    if (shortcutRecordingWebContents.has(target.id)) return;
 
-    const toggle = resolveToggleShortcut(input);
-    if (toggle) {
+    const action = resolveKeyboardShortcut(input);
+    if (action) {
       event.preventDefault();
-      if (!input.isAutoRepeat) sendShortcut(toggle.action);
+      if (!isKeyboardShortcutAutoRepeat(input)) {
+        runKeyboardShortcutAction(action);
+      }
     }
   });
 }
@@ -253,6 +267,7 @@ function attachBrowserShortcuts(
 ): void {
   wc.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
+    if (resolveKeyboardShortcut(input)) return;
     const cmd = input.meta || input.control;
     if (!cmd) {
       if (input.key === "Escape" && wc.isLoading()) {
@@ -309,7 +324,6 @@ function applyZoomToAll(level: number): void {
 
 function buildAppMenu(): void {
   const isMac = process.platform === "darwin";
-  const fullScreenAccelerator = isMac ? "Ctrl+Cmd+F" : "F11";
 
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(isMac
@@ -321,9 +335,8 @@ function buildAppMenu(): void {
               { type: "separator" as const },
               {
                 label: "Settings\u2026",
-                accelerator: "CommandOrControl+,",
-                registerAccelerator: false,
-                click: () => sendShortcut("toggle-settings"),
+                ...menuShortcutOptions("toggle-settings"),
+                click: () => runKeyboardShortcutAction("toggle-settings"),
               } as Electron.MenuItemConstructorOptions,
               { type: "separator" as const },
               { role: "services" as const },
@@ -342,22 +355,19 @@ function buildAppMenu(): void {
       submenu: [
         {
           label: "New Tile",
-          accelerator: "CommandOrControl+N",
-          registerAccelerator: false,
-          click: () => sendShortcut("new-tile"),
+          ...menuShortcutOptions("new-tile"),
+          click: () => runKeyboardShortcutAction("new-tile"),
         },
         {
           label: "Close Tile",
-          accelerator: "CommandOrControl+W",
-          registerAccelerator: false,
-          click: () => sendShortcut("close-tile"),
+          ...menuShortcutOptions("close-tile"),
+          click: () => runKeyboardShortcutAction("close-tile"),
         },
         { type: "separator" },
         {
           label: "Open Workspace\u2026",
-          accelerator: "CommandOrControl+Shift+O",
-          registerAccelerator: false,
-          click: () => sendShortcut("add-workspace"),
+          ...menuShortcutOptions("add-workspace"),
+          click: () => runKeyboardShortcutAction("add-workspace"),
         },
       ],
     },
@@ -374,9 +384,8 @@ function buildAppMenu(): void {
         { type: "separator" },
         {
           label: "Find",
-          accelerator: "CommandOrControl+K",
-          registerAccelerator: false,
-          click: () => sendShortcut("focus-file-search"),
+          ...menuShortcutOptions("focus-file-search"),
+          click: () => runKeyboardShortcutAction("focus-file-search"),
         },
       ],
     },
@@ -385,38 +394,36 @@ function buildAppMenu(): void {
       submenu: [
         {
           label: "Toggle Files",
-          accelerator: "CommandOrControl+B",
-          registerAccelerator: false,
-          click: () => sendShortcut("sidebar-files"),
+          ...menuShortcutOptions("sidebar-files"),
+          click: () => runKeyboardShortcutAction("sidebar-files"),
         },
         {
           label: "Toggle Agent",
-          accelerator: "CommandOrControl+Alt+B",
-          registerAccelerator: false,
-          click: () => sendShortcut("toggle-agent"),
+          ...menuShortcutOptions("toggle-agent"),
+          click: () => runKeyboardShortcutAction("toggle-agent"),
         },
         { type: "separator" },
         {
           label: "Zoom In",
-          accelerator: "CommandOrControl+=",
-          click: () => applyZoomToAll(globalZoomLevel + 0.25),
+          ...menuShortcutOptions("zoom-in"),
+          click: () => runKeyboardShortcutAction("zoom-in"),
         },
         {
           label: "Zoom Out",
-          accelerator: "CommandOrControl+-",
-          click: () => applyZoomToAll(globalZoomLevel - 0.25),
+          ...menuShortcutOptions("zoom-out"),
+          click: () => runKeyboardShortcutAction("zoom-out"),
         },
         {
           label: "Actual Size",
-          accelerator: "CommandOrControl+0",
-          click: () => applyZoomToAll(0),
+          ...menuShortcutOptions("zoom-reset"),
+          click: () => runKeyboardShortcutAction("zoom-reset"),
         },
         { type: "separator" },
         { role: "toggleDevTools" },
         {
           label: "Toggle Full Screen",
-          accelerator: fullScreenAccelerator,
-          click: (_, win) => win?.setFullScreen(!win.isFullScreen()),
+          ...menuShortcutOptions("toggle-full-screen"),
+          click: () => runKeyboardShortcutAction("toggle-full-screen"),
         },
       ],
     },
@@ -557,8 +564,22 @@ ipcMain.handle(
   "pref:set",
   (_event, key: string, value: unknown) => {
     setPref(config, key, value);
+    if (key === KEYBOARD_SHORTCUTS_PREF) {
+      buildAppMenu();
+    }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("pref:changed", key, value);
+    }
+  },
+);
+
+ipcMain.on(
+  "keyboard-shortcut-recording:set",
+  (event, recording: boolean) => {
+    if (recording) {
+      shortcutRecordingWebContents.add(event.sender.id);
+    } else {
+      shortcutRecordingWebContents.delete(event.sender.id);
     }
   },
 );
